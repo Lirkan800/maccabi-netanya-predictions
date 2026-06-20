@@ -670,6 +670,7 @@ def calculate_match_points(guess_home, guess_away, actual_home, actual_away, is_
 @app.route("/")
 @login_required
 def home():
+    auto_check_results_if_needed()
     username = current_user()
     data = players[username]
 
@@ -1494,6 +1495,51 @@ def cron_check_results():
     save_matches(matches)
 
     return f"Check results done. checked={checked}, finished={finished}, skipped={skipped}"
+
+def auto_check_results_if_needed():
+    matches = load_matches()
+    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
+
+    changed = False
+
+    for match in matches:
+        if match.get("status") == "finished":
+            continue
+
+        if match.get("match_date") != today:
+            continue
+
+        if not match.get("api_fixture_id"):
+            continue
+
+        match_time = match.get("match_time", "")
+        if not match_time:
+            continue
+
+        match_datetime = datetime.strptime(
+            match["match_date"] + " " + match_time,
+            "%Y-%m-%d %H:%M"
+        )
+
+        # בודק רק אחרי שעברו לפחות שעתיים מתחילת המשחק
+        if now < match_datetime + timedelta(hours=2):
+            continue
+
+        api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
+        if not api_fixture:
+            continue
+
+        fixture = api_fixture["fixture"]
+        goals = api_fixture["goals"]
+        status = fixture["status"]["short"]
+
+        if status == "FT" and goals["home"] is not None and goals["away"] is not None:
+            finish_match_and_calculate(match, goals["home"], goals["away"])
+            changed = True
+
+    if changed:
+        save_matches(matches)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
