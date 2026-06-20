@@ -10,15 +10,21 @@
             box-sizing: border-box;
         }
 
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background:
-                radial-gradient(circle at top, rgba(255,212,0,0.18), transparent 35%),
-                linear-gradient(180deg, #050505, #111);
-            color: white;
-            min-height: 100vh;
-        }
+        html {
+    background: #050505;
+    min-height: 100%;
+    }
+
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background:
+            radial-gradient(circle at top, rgba(255,212,0,0.18), transparent 35%),
+            linear-gradient(180deg, #050505, #111);
+        color: white;
+        min-height: 100vh;
+        overscroll-behavior-y: none;
+    }
 
         .header {
             position: relative;
