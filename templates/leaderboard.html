@@ -99,56 +99,73 @@
 
 @media (max-width: 768px) {
     .podium-wrapper {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-areas:
+        "first first"
+        "second third" !important;
     gap: 10px !important;
-    margin: 16px 0 !important;
     width: 100% !important;
-    max-width: 100% !important;
-}
+    max-width: 340px !important;
+    margin: 16px auto 20px !important;
+    justify-items: center !important;
+    align-items: end !important;
+    }
 
-.podium-card,
-.first-place {
-    display: block !important;
-    width: 100% !important;
-    max-width: 280px !important;
-    padding: 12px !important;
-    transform: none !important;
-    opacity: 1 !important;
-    visibility: visible !important;
-}
+    .first-place {
+        grid-area: first !important;
+        width: 75% !important;
+        max-width: 230px !important;
+    }
+
+    .second-place {
+        grid-area: second !important;
+    }
+
+    .third-place {
+        grid-area: third !important;
+    }
+
+    .podium-card {
+        display: block !important;
+        width: 100% !important;
+        max-width: 155px !important;
+        padding: 10px 7px !important;
+        border-radius: 16px !important;
+        transform: none !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
     .podium-card:hover,
     .first-place:hover {
         transform: none !important;
-        box-shadow: none !important;
     }
 
     .podium-rank {
-        font-size: 30px !important;
+        font-size: 28px !important;
         margin-bottom: 4px !important;
     }
 
     .podium-name {
-        font-size: 16px !important;
+        font-size: 15px !important;
         line-height: 1.2 !important;
     }
 
     .podium-points {
-        font-size: 14px !important;
+        font-size: 13px !important;
         margin-top: 5px !important;
     }
 
     .podium-card p {
-        font-size: 12px !important;
+        font-size: 11px !important;
         margin: 5px 0 !important;
     }
 
     .podium-base {
-        margin-top: 7px !important;
-        padding: 6px !important;
-        border-radius: 10px !important;
-        font-size: 12px !important;
+        font-size: 11px !important;
+        padding: 5px !important;
+        margin-top: 6px !important;
     }
 
     .leaderboard-table {
@@ -211,7 +228,7 @@
             </div>
             {% endif %}
 
-            <div class="podium-card first-place" onmouseenter="launchConfetti(this)">
+            <div class="podium-card first-place" onmouseenter="launchConfetti(this)" onclick="launchConfetti(this)">
                 <div class="podium-rank">🥇</div>
                 <div class="podium-name">{{ leaderboard[0][0] }}</div>
                 <div class="podium-points">{{ leaderboard[0][1].points }} נק׳</div>
