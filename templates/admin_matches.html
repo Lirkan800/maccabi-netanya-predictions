@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}
+ניהול משחקים
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h2>⚽ ניהול משחקים</h2>
+    <h3>🌍 ייבוא משחק מה-API</h3>
+
+<form method="POST">
+    <p>Fixture ID</p>
+    <input type="text" name="api_fixture_id" placeholder="לדוגמה: 1489385">
+
+    <br><br>
+
+    <button type="submit" name="action" value="import_api_match">
+        ייבא משחק מה-API
+    </button>
+</form>
+<form method="POST">
+    <button type="submit" name="action" value="attach_netanya_api">
+        חבר משחקי נתניה ל-API לפי תאריך
+    </button>
+</form>
+<hr>
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if success %}
+        <p class="success">{{ success }}</p>
+    {% endif %}
+
+    <h3>➕ יצירת משחק חדש</h3>
+
+    <form method="POST">
+
+        <p>קבוצת בית</p>
+        <select name="home_team">
+            {% for team in teams %}
+                <option value="{{ team }}">{{ team }}</option>
+            {% endfor %}
+        </select>
+
+        <p>קבוצת חוץ</p>
+        <select name="away_team">
+            {% for team in teams %}
+                <option value="{{ team }}">{{ team }}</option>
+            {% endfor %}
+        </select>
+
+        <p>תאריך המשחק</p>
+        <input type="date" name="match_date">
+
+        <p>שעת המשחק</p>
+        <input type="time" name="match_time">
+
+        <br><br>
+
+        <label>
+            <input type="checkbox" name="is_playoff">
+            משחק פלייאוף
+        </label>
+
+        <br><br>
+
+        <button type="submit" name="action" value="create_match">
+            צור משחק
+        </button>
+
+    </form>
+</div>
+
+<div class="card">
+    <h2>📋 המשחקים במערכת</h2>
+
+    {% if matches %}
+        <table>
+            <tr>
+                <th>מס׳</th>
+                <th>בית</th>
+                <th>חוץ</th>
+                <th>תאריך</th>
+                <th>שעה</th>
+                <th>פלייאוף</th>
+                <th>תוצאה</th>
+                <th>סטטוס</th>
+                <th>סיום משחק</th>
+                <th>מחיקה</th>
+            </tr>
+
+            {% for match in matches %}
+            <tr>
+                <td>{{ match.id }}</td>
+                <td>{{ match.home_team }}</td>
+                <td>{{ match.away_team }}</td>
+                <td>{{ match.match_date }}</td>
+                <td>{{ match.match_time }}</td>
+                <td>{% if match.is_playoff %}כן{% else %}לא{% endif %}</td>
+
+                <td>
+                    {% if match.home_score is not none %}
+                        {{ match.home_score }} - {{ match.away_score }}
+                    {% else %}
+                        טרם נקבעה
+                    {% endif %}
+                </td>
+
+                <td>{{ match.status }}</td>
+
+               <td>
+    {% if match.status == "finished" %}
+        חושב
+    {% elif match.api_fixture_id %}
+        <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');">
+            <input type="hidden" name="match_id" value="{{ match.id }}">
+            <button type="submit" name="action" value="check_api_result">
+                בדוק API וחשב ניקוד
+            </button>
+        </form>
+    {% else %}
+        <form method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');">
+            <input type="hidden" name="match_id" value="{{ match.id }}">
+
+            <input type="number" name="actual_home" min="0" value="0" style="width:70px;">
+            -
+            <input type="number" name="actual_away" min="0" value="0" style="width:70px;">
+
+            <br><br>
+
+            <button type="submit" name="action" value="finish_match">
+                סיים ידנית וחשב ניקוד
+            </button>
+        </form>
+    {% endif %}
+</td>
+
+                <td>
+                    <form method="POST" onsubmit="return confirm('בטוח למחוק את המשחק הזה?');">
+                        <input type="hidden" name="match_id" value="{{ match.id }}">
+                        <button class="danger" type="submit" name="action" value="delete_match">
+                            מחק
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>עדיין אין משחקים במערכת.</p>
+    {% endif %}
+</div>
+
+{% endblock %}

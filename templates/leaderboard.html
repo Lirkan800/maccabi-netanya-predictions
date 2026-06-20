@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}
+טבלת דירוג
+{% endblock %}
+
+{% block content %}
+
+<style>
+.podium-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 22px;
+    margin: 40px 0;
+    flex-wrap: wrap;
+}
+
+.confetti {
+    position: absolute;
+    width: 10px;
+    height: 16px;
+    border-radius: 3px;
+    animation: confetti-burst 1200ms ease-out forwards;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+@keyframes confetti-burst {
+    0% {
+        opacity: 1;
+        transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(var(--x), var(--y)) rotate(var(--rotate)) scale(0.7);
+    }
+}
+
+.podium-card {
+    text-align: center;
+    width: 230px;
+    border-radius: 22px;
+    padding: 22px;
+    background: linear-gradient(180deg, #242424, #111);
+    border: 1px solid rgba(255,212,0,0.25);
+    transition: 0.25s;
+}
+
+.podium-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 18px 40px rgba(255,212,0,0.18);
+}
+
+.first-place {
+    width: 280px;
+    padding: 30px;
+    border: 2px solid #ffd400;
+    background: linear-gradient(180deg, #3a3200, #151515);
+    transform: translateY(-25px);
+}
+
+.first-place:hover {
+    transform: translateY(-35px) scale(1.03);
+    box-shadow: 0 0 45px rgba(255,212,0,0.35);
+}
+
+.podium-rank {
+    font-size: 54px;
+    margin-bottom: 10px;
+}
+
+.podium-name {
+    font-size: 24px;
+    font-weight: bold;
+    color: #ffd400;
+}
+
+.podium-points {
+    font-size: 22px;
+    margin-top: 10px;
+}
+
+.podium-base {
+    margin-top: 18px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255,212,0,0.12);
+    font-weight: bold;
+}
+
+.leaderboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #191919;
+    overflow: hidden;
+    border-radius: 16px;
+}
+
+@media (max-width: 768px) {
+    .podium-wrapper {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        grid-template-areas:
+            "first first"
+            "second third" !important;
+        gap: 10px !important;
+        margin: 18px auto 20px !important;
+        width: 100% !important;
+        max-width: 360px !important;
+        justify-items: center !important;
+        align-items: end !important;
+    }
+
+    .podium-card {
+        width: 100% !important;
+        min-width: 0 !important;
+        padding: 10px 8px !important;
+        border-radius: 16px !important;
+        transform: none !important;
+    }
+
+    .second-place {
+        grid-area: second !important;
+    }
+
+    .third-place {
+        grid-area: third !important;
+    }
+
+    .first-place {
+        grid-area: first !important;
+        width: 74% !important;
+        max-width: 230px !important;
+        padding: 12px 10px !important;
+        transform: none !important;
+        border-radius: 18px !important;
+    }
+
+    .podium-card:hover,
+    .first-place:hover {
+        transform: none !important;
+        box-shadow: none !important;
+    }
+
+    .podium-rank {
+        font-size: 30px !important;
+        margin-bottom: 4px !important;
+    }
+
+    .podium-name {
+        font-size: 16px !important;
+        line-height: 1.2 !important;
+    }
+
+    .podium-points {
+        font-size: 14px !important;
+        margin-top: 5px !important;
+    }
+
+    .podium-card p {
+        font-size: 12px !important;
+        margin: 5px 0 !important;
+    }
+
+    .podium-base {
+        margin-top: 7px !important;
+        padding: 6px !important;
+        border-radius: 10px !important;
+        font-size: 12px !important;
+    }
+
+    .leaderboard-table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        display: table !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+    }
+
+    .leaderboard-table th,
+    .leaderboard-table td {
+        padding: 7px 2px !important;
+        font-size: 10.5px !important;
+        line-height: 1.3 !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        text-align: center !important;
+    }
+
+    .leaderboard-table th:nth-child(1),
+    .leaderboard-table td:nth-child(1) {
+        width: 22% !important;
+    }
+
+    .leaderboard-table th:nth-child(2),
+    .leaderboard-table td:nth-child(2) {
+        width: 26% !important;
+    }
+
+    .leaderboard-table th:nth-child(3),
+    .leaderboard-table td:nth-child(3) {
+        width: 22% !important;
+    }
+
+    .leaderboard-table th:nth-child(4),
+    .leaderboard-table td:nth-child(4) {
+        width: 30% !important;
+    }
+
+    .confetti {
+        display: none !important;
+    }
+}
+</style>
+
+<div class="card">
+    <h2>🏆 טבלת דירוג</h2>
+
+    {% if leaderboard|length >= 1 %}
+        <div class="podium-wrapper">
+
+            {% if leaderboard|length >= 2 %}
+            <div class="podium-card second-place">
+                <div class="podium-rank">🥈</div>
+                <div class="podium-name">{{ leaderboard[1][0] }}</div>
+                <div class="podium-points">{{ leaderboard[1][1].points }} נק׳</div>
+                <p>🔥 רצף {{ leaderboard[1][1].streak }}</p>
+                <div class="podium-base">מקום 2</div>
+            </div>
+            {% endif %}
+
+            <div class="podium-card first-place" onmouseenter="launchConfetti(this)">
+                <div class="podium-rank">🥇</div>
+                <div class="podium-name">{{ leaderboard[0][0] }}</div>
+                <div class="podium-points">{{ leaderboard[0][1].points }} נק׳</div>
+                <p>🔥 רצף {{ leaderboard[0][1].streak }}</p>
+                <div class="podium-base">המוביל הגדול</div>
+            </div>
+
+            {% if leaderboard|length >= 3 %}
+            <div class="podium-card third-place">
+                <div class="podium-rank">🥉</div>
+                <div class="podium-name">{{ leaderboard[2][0] }}</div>
+                <div class="podium-points">{{ leaderboard[2][1].points }} נק׳</div>
+                <p>🔥 רצף {{ leaderboard[2][1].streak }}</p>
+                <div class="podium-base">מקום 3</div>
+            </div>
+            {% endif %}
+
+        </div>
+    {% endif %}
+
+    {% if leaderboard|length > 3 %}
+    <table class="leaderboard-table">
+        <tr>
+            <th>מקום</th>
+            <th>משתתף</th>
+            <th>נקודות</th>
+            <th>רצף מדויקות</th>
+        </tr>
+
+        {% for player, data in leaderboard[3:] %}
+        <tr>
+            <td>מקום {{ loop.index + 3 }}</td>
+            <td>{{ player }}</td>
+            <td><strong>{{ data.points }}</strong> נק׳</td>
+            <td>🔥 {{ data.streak }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</div>
+
+<script>
+let confettiCooldown = false;
+
+function launchConfetti(element) {
+    if (confettiCooldown) return;
+
+    confettiCooldown = true;
+    setTimeout(() => {
+        confettiCooldown = false;
+    }, 700);
+
+    const colors = [
+        "#ffd400",
+        "#ffffff",
+        "#ff3b3b",
+        "#4caf50",
+        "#2196f3",
+        "#ff9800",
+        "#e040fb"
+    ];
+
+    const shapes = ["rect", "circle", "strip"];
+
+    const rect = element.getBoundingClientRect();
+    const startX = rect.left + rect.width / 2;
+    const startY = rect.top + rect.height / 2 + window.scrollY;
+
+    for (let i = 0; i < 80; i++) {
+        const confetti = document.createElement("span");
+        confetti.className = "confetti";
+
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const shape = shapes[Math.floor(Math.random() * shapes.length)];
+
+        confetti.style.background = color;
+        confetti.style.left = startX + "px";
+        confetti.style.top = startY + "px";
+
+        if (shape === "circle") {
+            confetti.style.borderRadius = "50%";
+            confetti.style.width = "9px";
+            confetti.style.height = "9px";
+        }
+
+        if (shape === "strip") {
+            confetti.style.width = "6px";
+            confetti.style.height = "22px";
+            confetti.style.borderRadius = "4px";
+        }
+
+        confetti.style.setProperty("--x", (Math.random() * 520 - 260) + "px");
+        confetti.style.setProperty("--y", (Math.random() * 360 - 120) + "px");
+        confetti.style.setProperty("--rotate", (Math.random() * 900 - 450) + "deg");
+
+        document.body.appendChild(confetti);
+
+        setTimeout(() => {
+            confetti.remove();
+        }, 1200);
+    }
+}
+</script>
+
+{% endblock %}

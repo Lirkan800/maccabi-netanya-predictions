@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}
+הצטרפות
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+
+    <h2>➕ הצטרפות למשחק</h2>
+
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if success %}
+        <p class="success">{{ success }}</p>
+    {% endif %}
+
+    <form method="POST">
+
+        <p>שם משתתף</p>
+        <input type="text" name="new_player">
+
+        <p>סיסמה</p>
+        <input type="password" name="player_password">
+
+        <p>אימות סיסמה</p>
+        <input type="password" name="confirm_player_password">
+
+        <br><br>
+
+        <button type="submit">
+            הצטרף
+        </button>
+
+    </form>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ניחושי מכבי נתניה</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #fff;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ffd400, #111);
+            padding: 30px 20px;
+            text-align: center;
+            color: #111;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 34px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 25px;
+        }
+
+        .tab-button {
+            background: #222;
+            color: #ffd400;
+            border: 1px solid #ffd400;
+            padding: 12px 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .tab-button:hover {
+            background: #ffd400;
+            color: #111;
+        }
+
+        .section {
+            display: none;
+            background: #1c1c1c;
+            padding: 25px;
+            border-radius: 18px;
+            box-shadow: 0 0 15px rgba(255, 212, 0, 0.15);
+            margin-bottom: 25px;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        input, select {
+            padding: 10px;
+            border-radius: 10px;
+            border: none;
+            margin: 6px 0;
+            max-width: 260px;
+        }
+
+        button {
+            background: #ffd400;
+            color: #111;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        .danger {
+            background: #e63946;
+            color: white;
+        }
+
+        .card {
+            background: #2a2a2a;
+            padding: 18px;
+            border-radius: 14px;
+            margin: 15px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #222;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        th {
+            background: #ffd400;
+            color: #111;
+        }
+
+        td, th {
+            padding: 13px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+        }
+
+        .message-error {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        .message-success {
+            color: #6bff95;
+            font-weight: bold;
+        }
+
+        @media (max-width: 700px) {
+            .header h1 {
+                font-size: 26px;
+            }
+
+            .tabs {
+                flex-direction: column;
+            }
+
+            .tab-button {
+                width: 100%;
+            }
+
+            table {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="header">
+    <h1>💛🖤 ניחושי מכבי נתניה</h1>
+    <p>מערכת ניהול תחזיות, טבלה וניקוד</p>
+</div>
+
+<div class="container">
+
+    <div class="tabs">
+        <button class="tab-button" onclick="showTab('leaderboard')">🏆 טבלת דירוג</button>
+        <button class="tab-button" onclick="showTab('join')">➕ הצטרפות</button>
+        <button class="tab-button" onclick="showTab('rules')">📜 חוקים</button>
+        <button class="tab-button" onclick="showTab('admin')">🔐 Admin</button>
+    </div>
+
+    {% if error %}
+        <p class="message-error">{{ error }}</p>
+    {% endif %}
+
+    {% if success %}
+        <p class="message-success">{{ success }}</p>
+    {% endif %}
+
+    <div id="leaderboard" class="section active">
+        <h2>🏆 טבלת דירוג</h2>
+
+        {% if player_to_self_delete %}
+            <div class="card" style="border: 2px solid #e63946;">
+                <h3>מחיקה עצמית</h3>
+                <p>הזן סיסמה כדי למחוק את <strong>{{ player_to_self_delete }}</strong></p>
+
+                <form method="POST">
+                    <input type="hidden" name="player_to_delete" value="{{ player_to_self_delete }}">
+                    <input type="password" name="delete_password" placeholder="סיסמת משתתף">
+                    <br>
+                    <button class="danger" type="submit" name="action" value="confirm_self_delete">כן, מחק אותי</button>
+                </form>
+
+                <form method="GET">
+                    <button type="submit">ביטול</button>
+                </form>
+            </div>
+        {% endif %}
+
+        <table>
+            <tr>
+                <th>מקום</th>
+                <th>משתתף</th>
+                <th>נקודות</th>
+                <th>רצף מדויקות</th>
+                <th>פעולה</th>
+            </tr>
+
+            {% for player, data in leaderboard %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ player }}</td>
+                <td>{{ data.points }}</td>
+                <td>{{ data.streak }}</td>
+                <td>
+                    {% if is_admin %}
+                        <form method="POST">
+                            <input type="hidden" name="player_to_delete" value="{{ player }}">
+                            <button class="danger" type="submit" name="action" value="ask_delete">מחק</button>
+                        </form>
+                    {% else %}
+                        <form method="POST">
+                            <input type="hidden" name="player_to_delete" value="{{ player }}">
+                            <button class="danger" type="submit" name="action" value="ask_self_delete">מחק אותי</button>
+                        </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+    <div id="join" class="section">
+        <h2>➕ הצטרפות למשחק</h2>
+
+        <div class="card">
+            <form method="POST">
+                <input type="text" name="new_player" placeholder="שם משתתף">
+                <br>
+                <input type="password" name="player_password" placeholder="סיסמה">
+                <br>
+                <input type="password" name="confirm_player_password" placeholder="אימות סיסמה">
+                <br>
+                <button type="submit" name="action" value="add_player">הצטרף</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="rules" class="section">
+        <h2>📜 חוקי המשחק</h2>
+
+        <div class="card">
+            <h3>עונה רגילה</h3>
+            <p>תוצאה מדויקת: 2 נקודות</p>
+            <p>כיוון נכון בלבד: 1 נקודה</p>
+            <p>טעות מלאה: 0 נקודות</p>
+        </div>
+
+        <div class="card">
+            <h3>פלייאוף</h3>
+            <p>תוצאה מדויקת: 3 נקודות</p>
+            <p>כיוון נכון בלבד: 2 נקודות</p>
+            <p>טעות מלאה: 0 נקודות</p>
+        </div>
+
+        <div class="card">
+            <h3>בונוס רצף</h3>
+            <p>3 פגיעות מדויקות רצופות = בונוס 6 נקודות.</p>
+            <p>לאחר קבלת הבונוס, הרצף מתאפס.</p>
+        </div>
+    </div>
+
+    <div id="admin" class="section">
+        <h2>🔐 אזור מנהל</h2>
+
+        {% if not is_admin %}
+            <div class="card">
+                <form method="POST">
+                    <input type="password" name="admin_password" placeholder="סיסמת מנהל">
+                    <br>
+                    <button type="submit" name="action" value="login">כניסה</button>
+                </form>
+            </div>
+        {% else %}
+            <div class="card">
+                <form method="POST">
+                    <button type="submit" name="action" value="logout">יציאה ממצב מנהל</button>
+                </form>
+            </div>
+
+            {% if player_to_delete %}
+                <div class="card" style="border: 2px solid #e63946;">
+                    <h3>אישור מחיקה</h3>
+                    <p>האם אתה בטוח שברצונך למחוק את המשתתף <strong>{{ player_to_delete }}</strong>?</p>
+
+                    <form method="POST" style="display:inline;">
+                        <input type="hidden" name="player_to_delete" value="{{ player_to_delete }}">
+                        <button class="danger" type="submit" name="action" value="confirm_delete">כן, מחק</button>
+                    </form>
+
+                    <form method="GET" style="display:inline;">
+                        <button type="submit">ביטול</button>
+                    </form>
+                </div>
+            {% endif %}
+
+            <div class="card">
+                <h3>🧪 Test Mode - בדיקת ניקוד</h3>
+
+                <form method="POST">
+                    <p>משתתף</p>
+                    <select name="player">
+                        {% for player in players %}
+                            <option value="{{ player }}" {% if player == selected_player %}selected{% endif %}>
+                                {{ player }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    <p>קבוצת בית</p>
+                    <select name="home_team">
+                        {% for team in teams %}
+                            <option value="{{ team }}" {% if team == selected_home %}selected{% endif %}>
+                                {{ team }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    <p>קבוצת חוץ</p>
+                    <select name="away_team">
+                        {% for team in teams %}
+                            <option value="{{ team }}" {% if team == selected_away %}selected{% endif %}>
+                                {{ team }}
+                            </option>
+                        {% endfor %}
+                    </select>
+
+                    <p>תוצאה אמיתית</p>
+                    <input type="number" name="actual_home" value="{{ actual_home }}" min="0">
+                    -
+                    <input type="number" name="actual_away" value="{{ actual_away }}" min="0">
+
+                    <p>ניחוש משתתף</p>
+                    <input type="number" name="guess_home" value="{{ guess_home }}" min="0">
+                    -
+                    <input type="number" name="guess_away" value="{{ guess_away }}" min="0">
+
+                    <br><br>
+
+                    <label>
+                        <input type="checkbox" name="is_playoff" {% if is_playoff %}checked{% endif %}>
+                        משחק פלייאוף
+                    </label>
+
+                    <br><br>
+
+                    <button type="submit" name="action" value="calculate">חשב ניקוד</button>
+                    <button class="danger" type="submit" name="action" value="reset">אפס טבלה</button>
+                </form>
+            </div>
+
+            {% if result_text %}
+                <div class="card">
+                    <h3>תוצאה אמיתית</h3>
+                    <p>{{ result_text }}</p>
+                </div>
+            {% endif %}
+
+            {% if points_text %}
+                <div class="card">
+                    <h3>תוצאת החישוב</h3>
+                    <p>{{ points_text }}</p>
+                </div>
+            {% endif %}
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+    function showTab(tabName) {
+        const sections = document.querySelectorAll('.section');
+        sections.forEach(section => section.classList.remove('active'));
+
+        document.getElementById(tabName).classList.add('active');
+    }
+</script>
+
+</body>
+</html>

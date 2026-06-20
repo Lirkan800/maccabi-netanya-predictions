@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Test Mode{% endblock %}
+
+{% block content %}
+
+<div class="card">
+
+    <h2>🧪 Test Mode</h2>
+
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if result_text %}
+        <p class="success">{{ result_text }}</p>
+    {% endif %}
+
+    {% if points_text %}
+        <p class="success">{{ points_text }}</p>
+    {% endif %}
+
+    <form method="POST">
+
+        <p>משתתף</p>
+        <select name="player">
+            {% for player in players %}
+                <option value="{{ player }}"
+                    {% if player == selected_player %}selected{% endif %}>
+                    {{ player }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <p>קבוצת בית</p>
+        <select name="home_team">
+            {% for team in teams %}
+                <option value="{{ team }}"
+                    {% if team == selected_home %}selected{% endif %}>
+                    {{ team }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <p>קבוצת חוץ</p>
+        <select name="away_team">
+            {% for team in teams %}
+                <option value="{{ team }}"
+                    {% if team == selected_away %}selected{% endif %}>
+                    {{ team }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <p>תוצאה אמיתית</p>
+
+        <input
+            type="number"
+            name="actual_home"
+            value="{{ actual_home }}"
+            min="0">
+
+        <input
+            type="number"
+            name="actual_away"
+            value="{{ actual_away }}"
+            min="0">
+
+        <p>ניחוש המשתתף</p>
+
+        <input
+            type="number"
+            name="guess_home"
+            value="{{ guess_home }}"
+            min="0">
+
+        <input
+            type="number"
+            name="guess_away"
+            value="{{ guess_away }}"
+            min="0">
+
+        <br><br>
+
+        <label>
+            <input
+                type="checkbox"
+                name="is_playoff"
+                {% if is_playoff %}checked{% endif %}>
+            משחק פלייאוף
+        </label>
+
+        <br><br>
+
+        <button type="submit">
+            חשב ניקוד
+        </button>
+
+    </form>
+
+</div>
+
+{% endblock %}

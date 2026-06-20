@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h2>🔐 מרכז השליטה</h2>
+
+    {% if error %}
+        <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if not is_admin %}
+        <form method="POST">
+            <p>סיסמת מנהל</p>
+            <input type="password" name="admin_password">
+            <br><br>
+            <button type="submit" name="action" value="login">כניסה</button>
+        </form>
+    {% else %}
+
+        <p class="success">אתה מחובר כמנהל.</p>
+
+        <div class="card">
+            <h3>📊 מצב המערכת</h3>
+            <p>👥 מספר משתתפים: <strong>{{ total_players }}</strong></p>
+            <p>🏆 מוביל הטבלה: <strong>{{ leader_name }}</strong> עם {{ leader_points }} נקודות</p>
+            <p>🔥 הרצף הגבוה כרגע: <strong>{{ highest_streak }}</strong></p>
+        </div>
+
+        <div class="card">
+    <h3>⚙️ פעולות מהירות</h3>
+
+    <a href="/admin/users">
+        <button>👥 ניהול משתתפים</button>
+    </a>
+
+    <a href="/admin/matches">
+        <button>⚽ ניהול משחקים</button>
+    </a>
+
+    <a href="/admin/test">
+        <button>🧪 Test Mode</button>
+    </a>
+</div>
+
+        <form method="POST">
+            <button class="danger" type="submit" name="action" value="logout">
+                יציאה ממצב מנהל
+            </button>
+        </form>
+
+    {% endif %}
+</div>
+
+{% endblock %}

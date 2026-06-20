@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}
+דף הבית
+{% endblock %}
+
+{% block content %}
+
+<style>
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+    margin-top: 25px;
+}
+
+.stat-card {
+    background: linear-gradient(180deg, #252525, #151515);
+    border: 1px solid rgba(255,212,0,0.25);
+    border-radius: 22px;
+    padding: 24px;
+    text-align: center;
+}
+
+.stat-icon {
+    font-size: 38px;
+    margin-bottom: 12px;
+}
+
+.stat-title {
+    color: #aaa;
+    font-weight: bold;
+}
+
+.stat-value {
+    color: #ffd400;
+    font-size: 34px;
+    font-weight: 900;
+    margin-top: 8px;
+}
+
+.next-match-box {
+    margin-top: 25px;
+    padding: 24px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(255,212,0,0.15), rgba(255,212,0,0.04));
+    border: 1px solid rgba(255,212,0,0.25);
+    text-align: center;
+}
+
+.action-row {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 25px;
+}
+
+.action-row a {
+    text-decoration: none;
+    background: #ffd400;
+    color: #111;
+    padding: 13px 22px;
+    border-radius: 999px;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin-top: 14px;
+    }
+
+    .stat-card {
+        padding: 10px;
+        border-radius: 14px;
+    }
+
+    .stat-icon {
+        font-size: 22px;
+        margin-bottom: 5px;
+    }
+
+    .stat-title {
+        font-size: 11px;
+    }
+
+    .stat-value {
+        font-size: 22px;
+        margin-top: 4px;
+    }
+
+    .next-match-box {
+        margin-top: 14px;
+        padding: 14px;
+        border-radius: 16px;
+    }
+
+    .next-match-box h2 {
+        font-size: 18px !important;
+    }
+
+    .next-match-box h3 {
+        font-size: 16px !important;
+        line-height: 1.4;
+    }
+
+    .next-match-box p {
+        font-size: 13px !important;
+        line-height: 1.5;
+    }
+
+    .action-row {
+        gap: 8px;
+        margin-top: 14px;
+    }
+
+    .action-row a {
+        width: 100%;
+        padding: 10px;
+        font-size: 13px !important;
+        border-radius: 14px;
+        text-align: center;
+    }
+}
+
+</style>
+
+<div class="card">
+    <h2> דף הבית 🏠</h2>
+    <p>שלום {{ username }}, כאן נמצא הסיכום האישי שלך לעונת הניחושים.</p>
+
+    <div class="dashboard-grid">
+        <div class="stat-card">
+            <div class="stat-icon">🏅</div>
+            <div class="stat-title">המיקום שלך</div>
+            <div class="stat-value">{{ rank }}</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">⭐</div>
+            <div class="stat-title">סך נקודות</div>
+            <div class="stat-value">{{ points }}</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-title">רצף מדויקות</div>
+            <div class="stat-value">{{ streak }}</div>
+        </div>
+    </div>
+
+    <div class="next-match-box">
+        <h2>⚽ המשחק הבא</h2>
+
+        {% if next_match %}
+            <h3>
+                {{ next_match.home_team }}
+                נגד
+                {{ next_match.away_team }}
+            </h3>
+
+            <p>
+                📅  {{ next_match.display_date }}
+                |
+                🕒  {{ next_match.match_time if next_match.match_time else 'טרם נקבעה' }}
+            </p>
+
+            {% if next_match.is_playoff %}
+                <p>🔥 משחק פלייאוף — ניקוד מוגדל</p>
+            {% endif %}
+        {% else %}
+            <p>אין כרגע משחק פתוח לניחוש.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}
+חוקי המשחק
+{% endblock %}
+
+{% block content %}
+
+<style>
+.rules-hero {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.rules-hero h2 {
+    font-size: 34px;
+    color: #ffd400;
+}
+
+.rules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 18px;
+}
+
+.rule-card {
+    background: linear-gradient(180deg, #252525, #151515);
+    border: 1px solid rgba(255,212,0,0.22);
+    border-radius: 22px;
+    padding: 24px;
+    transition: 0.25s;
+}
+
+.rule-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 15px 35px rgba(255,212,0,0.13);
+}
+
+.rule-icon {
+    font-size: 38px;
+    margin-bottom: 12px;
+}
+
+.rule-card h3 {
+    color: #ffd400;
+    margin-top: 0;
+}
+
+.rule-card p {
+    color: #ddd;
+    line-height: 1.7;
+}
+
+.rules-note {
+    margin-top: 28px;
+    padding: 24px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(255,212,0,0.16), rgba(255,212,0,0.04));
+    border: 1px solid rgba(255,212,0,0.30);
+    text-align: center;
+}
+
+.rules-note strong {
+    color: #ffd400;
+}
+
+@media (max-width: 768px) {
+    .rules-hero {
+        margin-bottom: 14px;
+    }
+
+    .rules-hero h2 {
+        font-size: 21px !important;
+        margin-bottom: 6px;
+    }
+
+    .rules-hero p {
+        font-size: 13px !important;
+        margin: 0;
+    }
+
+    .rules-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .rule-card {
+        padding: 10px;
+        border-radius: 14px;
+    }
+
+    .rule-card:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    .rule-icon {
+        font-size: 23px;
+        margin-bottom: 5px;
+    }
+
+    .rule-card h3 {
+        font-size: 14px !important;
+        margin-bottom: 5px;
+    }
+
+    .rule-card p {
+        font-size: 11.5px !important;
+        line-height: 1.35;
+        margin: 0;
+    }
+
+    .rules-note {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        font-size: 12px !important;
+        line-height: 1.45;
+    }
+}
+
+</style>
+
+<div class="card">
+    <div class="rules-hero">
+        <h2>📜 חוקי משחק הניחושים</h2>
+        <p>כאן מרוכזים כל חוקי המשחק.</p>
+    </div>
+
+    <div class="rules-grid">
+
+        <div class="rule-card">
+            <div class="rule-icon">🎯</div>
+            <h3>פגיעה מדויקת</h3>
+            <p>
+                ניחוש תוצאה מדויקת מזכה ב־<strong>2 נקודות</strong>.
+                לדוגמה: ניחשת 2-1 והתוצאה הייתה 2-1.
+            </p>
+        </div>
+
+        <div class="rule-card">
+            <div class="rule-icon">✅</div>
+            <h3>כיוון נכון</h3>
+            <p>
+                ניחוש זהות המנצחת בלבד, ללא תוצאה מדויקת,
+                מזכה ב־<strong>נקודה אחת</strong>.
+                גם ניחוש תיקו לא מדויק נחשב ככיוון נכון.
+            </p>
+        </div>
+
+        <div class="rule-card">
+            <div class="rule-icon">🔥</div>
+            <h3>משחקי פלייאוף</h3>
+            <p>
+                במשחקי פלייאוף כל ניקוד מקבל תוספת של נקודה:
+                פגיעה מדויקת = <strong>3 נקודות</strong>,
+                כיוון נכון = <strong>2 נקודות</strong>.
+            </p>
+        </div>
+
+        <div class="rule-card">
+            <div class="rule-icon">⏰</div>
+            <h3>נעילת ניחושים</h3>
+            <p>
+                ניתן לשלוח או לעדכן ניחוש עד שעה לפני תחילת המשחק.
+                לאחר מכן הניחושים ננעלים ולא ניתן לבצע שינוי.
+            </p>
+        </div>
+
+        <div class="rule-card">
+            <div class="rule-icon">💥</div>
+            <h3>בונוס רצף</h3>
+            <p>
+                שלוש פגיעות מדויקות ברצף מעניקות בונוס של
+                <strong>6 נקודות</strong>.
+                לאחר קבלת הבונוס הרצף מתאפס.
+            </p>
+        </div>
+
+        <div class="rule-card">
+            <div class="rule-icon">❌</div>
+            <h3>אי שליחת ניחוש</h3>
+            <p>
+                משתתף שלא שלח ניחוש למשחק יקבל
+                <strong>0 נקודות</strong>,
+                והרצף שלו יתאפס.
+            </p>
+        </div>
+
+        <div class="rule-card">
+            <div class="rule-icon">🏆</div>
+            <h3>קביעת המנצח</h3>
+            <p>
+                המנצח הוא המשתתף שסיים את העונה עם מספר הנקודות הגבוה ביותר
+                בטבלת הדירוג.
+            </p>
+        </div>
+
+        <div class="rule-card">
+            <div class="rule-icon">💰</div>
+            <h3>פרס סוף עונה</h3>
+            <p>
+                בסיום העונה, כל משתתף מעביר
+                <strong>20 ₪</strong>
+                לזוכה הגדול.
+            </p>
+        </div>
+
+    </div>
+
+    <div class="rules-note">
+        <strong>שימו לב:</strong>
+        המשחק האחרון לעונה הוא המשחק האחרון של מכבי נתניה באותה עונה.
+    </div>
+</div>
+
+{% endblock %}

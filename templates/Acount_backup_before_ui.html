@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}
+החשבון שלי
+{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h2>👤 החשבון שלי</h2>
+
+    <p><strong>שם משתמש:</strong> {{ username }}</p>
+    <p><strong>🏆 מקום בטבלה:</strong> {{ rank }}</p>
+    <p><strong>⭐ נקודות:</strong> {{ points }}</p>
+    <p><strong>🔥 רצף נוכחי:</strong> {{ streak }}</p>
+</div>
+
+{% endblock %}

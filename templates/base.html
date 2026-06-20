@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}האימפריה עוד תחזור{% endblock %}</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(255,212,0,0.18), transparent 35%),
+                linear-gradient(180deg, #050505, #111);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .header {
+            position: relative;
+            overflow: hidden;
+            padding: 14px 20px 12px;
+            text-align: center;
+            color: white;
+            background:
+                radial-gradient(ellipse at center, rgba(255,212,0,0.34), rgba(255,212,0,0.10) 28%, transparent 58%),
+                linear-gradient(90deg, #050505 0%, #151200 25%, #201900 50%, #151200 75%, #050505 100%);
+            border-bottom: 2px solid rgba(255,212,0,0.55);
+        }
+
+        .header::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, transparent 0%, rgba(255,212,0,0.20) 48%, rgba(255,212,0,0.20) 52%, transparent 100%),
+                radial-gradient(ellipse at center, rgba(255,212,0,0.42), transparent 45%);
+            filter: blur(45px);
+            opacity: 0.9;
+            pointer-events: none;
+        }
+
+        .hero-logo {
+            position: relative;
+            z-index: 2;
+            width: 340px;
+            max-width: 90%;
+            margin: 0;
+            border-radius: 12px;
+            box-shadow:
+                0 0 45px rgba(255,212,0,0.45),
+                0 0 110px rgba(255,212,0,0.30),
+                0 0 220px rgba(255,212,0,0.18);
+        }
+
+        .user-box {
+            background: rgba(255,212,0,0.1);
+            border-bottom: 1px solid rgba(255,212,0,0.5);
+            text-align: center;
+            padding: 13px;
+            color: #ffd400;
+            font-weight: bold;
+        }
+
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(10,10,10,0.95);
+            backdrop-filter: blur(8px);
+            padding: 14px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            border-bottom: 1px solid rgba(255,212,0,0.45);
+        }
+
+        .navbar a {
+            text-decoration: none;
+            background: #1e1e1e;
+            color: #ffd400;
+            padding: 11px 18px;
+            border-radius: 999px;
+            font-weight: bold;
+            border: 1px solid rgba(255,212,0,0.25);
+            transition: 0.2s;
+        }
+
+        .navbar a:hover {
+            background: #ffd400;
+            color: #111;
+            transform: translateY(-2px);
+        }
+
+        .navbar a.active {
+            background: #ffd400;
+            color: #111;
+            box-shadow: 0 0 22px rgba(255,212,0,0.35);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            padding: 28px;
+        }
+
+        .card {
+            background: linear-gradient(180deg, #1d1d1d, #151515);
+            border: 1px solid rgba(255,212,0,0.18);
+            border-radius: 22px;
+            padding: 24px;
+            margin-bottom: 22px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.35);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            color: #ffd400;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #191919;
+            overflow: hidden;
+            border-radius: 16px;
+        }
+
+        th {
+            background: #ffd400;
+            color: #111;
+            font-size: 15px;
+        }
+
+        td, th {
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+        }
+
+        tr:hover {
+            background: rgba(255,212,0,0.07);
+        }
+
+        button {
+            background: linear-gradient(135deg, #ffd400, #e6b800);
+            color: #111;
+            border: none;
+            padding: 11px 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(255,212,0,0.25);
+        }
+
+        .danger {
+            background: linear-gradient(135deg, #dc3545, #9f1f2d);
+            color: white;
+        }
+
+        input, select {
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,212,0,0.25);
+            background: #101010;
+            color: white;
+            margin: 5px 0;
+            width: 100%;
+            max-width: 350px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #ffd400;
+            box-shadow: 0 0 0 3px rgba(255,212,0,0.15);
+        }
+
+        .success {
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        .error {
+            color: #ff6b6b;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+    html, body {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    body {
+        font-size: 14px;
+    }
+
+    .header {
+        padding: 8px;
+    }
+
+    .hero-logo {
+        width: 180px;
+        max-width: 85%;
+        box-shadow: 0 0 25px rgba(255,212,0,0.35);
+    }
+
+    .user-box {
+        font-size: 13px;
+        line-height: 1.6;
+        padding: 8px;
+    }
+
+    .navbar {
+        position: static;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+        padding: 8px;
+    }
+
+    .navbar a {
+        text-align: center;
+        padding: 8px 5px;
+        font-size: 12px;
+        border-radius: 12px;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 100%;
+        padding: 8px;
+        margin: 0;
+    }
+
+    .card {
+        width: 100%;
+        max-width: 100%;
+        padding: 12px;
+        margin-bottom: 12px;
+        border-radius: 14px;
+    }
+
+    .card h2,
+    h1, h2 {
+        font-size: 20px !important;
+        line-height: 1.25;
+        text-align: center;
+    }
+
+    h3 {
+        font-size: 17px !important;
+    }
+
+    p, label, a, button, input, select, td, th {
+        font-size: 13px !important;
+    }
+
+    button,
+    input,
+    select {
+        width: 100%;
+        max-width: 100%;
+        padding: 10px;
+    }
+
+    table {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 12px;
+    border-radius: 12px;
+    }
+
+    td, th {
+        padding: 7px;
+    }
+
+    .podium-wrapper {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 12px !important;
+        margin: 16px 0 !important;
+    }
+
+    .podium-card,
+    .first-place {
+        width: 100% !important;
+        max-width: 280px !important;
+        padding: 14px !important;
+        transform: none !important;
+    }
+
+    .first-place:hover,
+    .podium-card:hover {
+        transform: none !important;
+    }
+
+    .podium-rank {
+        font-size: 36px !important;
+        margin-bottom: 6px !important;
+    }
+
+    .podium-name {
+        font-size: 18px !important;
+    }
+
+    .podium-points {
+        font-size: 16px !important;
+        margin-top: 6px !important;
+    }
+
+    .podium-base {
+        margin-top: 10px !important;
+        padding: 8px !important;
+        font-size: 13px !important;
+    }
+
+    .confetti {
+        display: none;
+    }
+
+    div[style] {
+        max-width: 100% !important;
+    }
+
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+}
+    </style>
+</head>
+
+<body>
+
+<div class="header">
+    <img src="{{ url_for('static', filename='logo.png') }}"
+         alt="האימפריה עוד תחזור"
+         class="hero-logo">
+</div>
+
+{% if current_user %}
+    <div class="user-box">
+        שלום {{ current_user }} 👋 |
+        נקודות: {{ user_points }} |
+        מקום: {{ user_rank }}
+    </div>
+{% endif %}
+
+<div class="navbar">
+    <a class="{% if request.path == '/' %}active{% endif %}" href="/">דף הבית 🏠</a>
+    <a class="{% if request.path == '/leaderboard' %}active{% endif %}" href="/leaderboard">🏆 טבלת דירוג</a>
+    <a class="{% if request.path == '/predictions' %}active{% endif %}" href="/predictions">⚽ ניחושים</a>
+    <a class="{% if request.path == '/rules' %}active{% endif %}" href="/rules">📜 חוקים</a>
+    <a class="{% if request.path == '/statistics' %}active{% endif %}" href="/statistics">📊 סטטיסטיקות</a>
+
+    {% if current_user %}
+        <a href="/logout">🚪 התנתק</a>
+    {% else %}
+        <a class="{% if request.path == '/login' %}active{% endif %}" href="/login">🔑 התחברות</a>
+        <a class="{% if request.path == '/join' %}active{% endif %}" href="/join">➕ הרשמה</a>
+    {% endif %}
+
+    <a class="{% if request.path == '/admin' %}active{% endif %}" href="/admin">🔐 Admin</a>
+
+    {% if is_admin %}
+        <a class="{% if request.path == '/admin/users' %}active{% endif %}" href="/admin/users">👥 ניהול משתתפים</a>
+        <a class="{% if request.path == '/admin/test' %}active{% endif %}" href="/admin/test">🧪 Test Mode</a>
+        <a class="{% if request.path == '/admin/matches' %}active{% endif %}" href="/admin/matches">⚽ ניהול משחקים</a>
+    {% endif %}
+</div>
+
+<div class="container">
+    {% block content %}
+    {% endblock %}
+</div>
+
+</body>
+</html>
