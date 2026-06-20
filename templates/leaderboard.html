@@ -99,44 +99,25 @@
 
 @media (max-width: 768px) {
     .podium-wrapper {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        grid-template-areas:
-            "first first"
-            "second third" !important;
-        gap: 10px !important;
-        margin: 18px auto 20px !important;
-        width: 100% !important;
-        max-width: 360px !important;
-        justify-items: center !important;
-        align-items: end !important;
-    }
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 10px !important;
+    margin: 16px 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+}
 
-    .podium-card {
-        width: 100% !important;
-        min-width: 0 !important;
-        padding: 10px 8px !important;
-        border-radius: 16px !important;
-        transform: none !important;
-    }
-
-    .second-place {
-        grid-area: second !important;
-    }
-
-    .third-place {
-        grid-area: third !important;
-    }
-
-    .first-place {
-        grid-area: first !important;
-        width: 74% !important;
-        max-width: 230px !important;
-        padding: 12px 10px !important;
-        transform: none !important;
-        border-radius: 18px !important;
-    }
-
+.podium-card,
+.first-place {
+    display: block !important;
+    width: 100% !important;
+    max-width: 280px !important;
+    padding: 12px !important;
+    transform: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
     .podium-card:hover,
     .first-place:hover {
         transform: none !important;
