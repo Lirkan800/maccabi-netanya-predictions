@@ -731,6 +731,7 @@ def login():
             error = "סיסמה שגויה"
         else:
             session["username"] = username
+            session.permanent = False
             return redirect(url_for("home"))
 
     return render_template("login.html", error=error)
@@ -753,6 +754,13 @@ def logout():
         return "", 204
 
     return redirect(url_for("leaderboard"))
+
+
+@app.route("/auto-logout", methods=["POST"])
+def auto_logout():
+    session.pop("username", None)
+    return "", 204
+
 @app.route("/rules")
 @login_required
 def rules():
