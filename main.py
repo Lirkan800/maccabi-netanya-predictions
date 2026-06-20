@@ -10,6 +10,7 @@ import pg8000.dbapi
 from urllib.parse import urlparse, unquote
 
 app = Flask(__name__)
+app.config["SESSION_PERMANENT"] = False
 app.secret_key = os.environ.get("SECRET_KEY", "temporary_secret_key_for_test")
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Phxyuejhhoakh!")
@@ -707,7 +708,10 @@ def join():
         else:
             players[name] = {"points": 0, "streak": 0, "password": password}
             save_players()
+
             session["username"] = name
+            session.permanent = False
+
             return redirect(url_for("home"))
 
     return render_template("join.html", error=error, success=success)
@@ -741,11 +745,14 @@ def leaderboard():
         leaderboard=leaderboard_data
     )
 
-@app.route("/logout")
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.pop("username", None)
-    return redirect(url_for("leaderboard"))
 
+    if request.method == "POST":
+        return "", 204
+
+    return redirect(url_for("leaderboard"))
 @app.route("/rules")
 @login_required
 def rules():
