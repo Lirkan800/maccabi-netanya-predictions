@@ -1374,5 +1374,35 @@ def admin_test():
         guess_away=guess_away,
         is_playoff=is_playoff
     )
+
+@app.route("/admin/import-json")
+def import_json_to_db():
+    if not is_admin():
+        return redirect(url_for("admin"))
+
+    global players
+
+    imported = []
+
+    if os.path.exists("data/players.json"):
+        with open("data/players.json", "r", encoding="utf-8") as file:
+            players = json.load(file)
+        save_players()
+        imported.append("players")
+
+    if os.path.exists("data/matches.json"):
+        with open("data/matches.json", "r", encoding="utf-8") as file:
+            matches = json.load(file)
+        save_matches(matches)
+        imported.append("matches")
+
+    if os.path.exists("data/predictions.json"):
+        with open("data/predictions.json", "r", encoding="utf-8") as file:
+            predictions = json.load(file)
+        save_predictions(predictions)
+        imported.append("predictions")
+
+    return "Imported to database: " + ", ".join(imported)
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
