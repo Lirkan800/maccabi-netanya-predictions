@@ -23,6 +23,22 @@ teams = [
     "הפועל רמת גן", "עירוני טבריה", "עירוני קריית שמונה"
 ]
 
+TEAM_LOGOS = {
+    "מכבי נתניה": "מכבי נתניה.png",
+    "בני סכנין": "בני סכנין.png",
+    "בית\"ר י-ם": "ביתר ירושלים.png",
+    "בית\"ר ירושלים": "ביתר ירושלים.png",
+    "מכבי חיפה": "מכבי חיפה.png",
+    "מכבי ת\"א": "מכבי תל אביב.png",
+    "הפועל חיפה": "הפועל חיפה.png",
+    "הפועל ב\"ש": "הפועל באר שבע.png",
+    "הפועל ת\"א": "הפועל תל אביב.png",
+    "מכבי פ\"ת": "מכבי פתח תקווה.png",
+    "הפועל פ\"ת": "הפועל פתח תקווה.png",
+    "הפועל ר\"ג": "הפועל רמת גן.png",
+    "הפועל ק\"ש": "הפועל קריית שמונה.png",
+    "עירוני דורות טבריה": "עירוני טבריה.png"
+}
 
 def load_players():
     if os.path.exists(DATA_FILE):
@@ -199,7 +215,17 @@ def get_next_match():
         return None
 
     upcoming_matches.sort(key=lambda x: x[0])
-    return upcoming_matches[0][1]
+
+    next_match = upcoming_matches[0][1]
+
+    date_obj = datetime.strptime(
+        next_match["match_date"],
+        "%Y-%m-%d"
+    )
+
+    next_match["display_date"] = date_obj.strftime("%d/%m/%Y")
+
+    return next_match
 
 def is_match_locked(match):
     match_date = match.get("match_date", "")
@@ -597,7 +623,9 @@ def predictions():
         success=success,
         existing_prediction=existing_prediction,
         existing_home=existing_home,
-        existing_away=existing_away
+        existing_away=existing_away,
+        home_logo=TEAM_LOGOS.get(match["home_team"]),
+        away_logo=TEAM_LOGOS.get(match["away_team"])
     )
 @app.route("/admin", methods=["GET", "POST"])
 def admin():

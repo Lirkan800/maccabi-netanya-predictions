@@ -1,20 +1,22 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from functools import wraps
 from datetime import datetime, timedelta
-import json
 import os
 import uuid
+import json
+import sqlite3
 import requests
-app = Flask(__name__)
-app.secret_key = "temporary_secret_key_for_test"
+import pg8000.dbapi
+from urllib.parse import urlparse, unquote
 
-DATA_FILE = "data/players.json"
-MATCHES_FILE = "data/matches.json"
-PREDICTIONS_FILE = "data/predictions.json"
-ADMIN_PASSWORD = "Phxyuejhhoakh!"
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "temporary_secret_key_for_test")
+
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Phxyuejhhoakh!")
 NETANYA_TEAM_ID = 4505
-PREDICTIONS_FILE = "data/predictions.json"
 SETTINGS_FILE = "data/settings.json"
+DATABASE_URL = os.environ.get("DATABASE_URL")
+SQLITE_DB = os.environ.get("SQLITE_DB", "data/app.db")
 
 teams = [
     "מכבי נתניה", "מכבי תל אביב", "מכבי חיפה", "הפועל באר שבע",
@@ -40,52 +42,356 @@ TEAM_LOGOS = {
     "עירוני דורות טבריה": "עירוני טבריה.png"
 }
 
-def load_players():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as file:
-            data = json.load(file)
-    else:
-        data = {}
 
-    for player in data:
-        data[player].setdefault("points", 0)
-        data[player].setdefault("streak", 0)
-        data[player].setdefault("password", "")
+def is_postgres():
+    return bool(DATABASE_URL)
+
+
+def get_db_connection():
+    if is_postgres():
+        url = urlparse(DATABASE_URL)
+
+        return pg8000.dbapi.connect(
+            user=unquote(url.username or ""),
+            password=unquote(url.password or ""),
+            host=url.hostname,
+            port=url.port or 5432,
+            database=(url.path or "").lstrip("/")
+        )
+
+    os.makedirs(os.path.dirname(SQLITE_DB), exist_ok=True)
+    conn = sqlite3.connect(SQLITE_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def db_execute(query, params=None, fetchone=False, fetchall=False):
+    params = params or []
+
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(query, params)
+
+        result = None
+
+        if fetchone or fetchall:
+            rows = cur.fetchall() if fetchall else [cur.fetchone()]
+            columns = [desc[0] for desc in cur.description]
+
+            dict_rows = []
+            for row in rows:
+                if row is not None:
+                    dict_rows.append(dict(zip(columns, row)))
+
+            if fetchone:
+                result = dict_rows[0] if dict_rows else None
+            else:
+                result = dict_rows
+
+        conn.commit()
+        cur.close()
+        return result
+
+def normalize_row(row):
+    if row is None:
+        return None
+    return dict(row)
+
+
+def init_db():
+    if is_postgres():
+        queries = [
+            """
+            CREATE TABLE IF NOT EXISTS players (
+                name TEXT PRIMARY KEY,
+                password TEXT NOT NULL DEFAULT '',
+                points INTEGER NOT NULL DEFAULT 0,
+                streak INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS matches (
+                id TEXT PRIMARY KEY,
+                home_team TEXT NOT NULL,
+                away_team TEXT NOT NULL,
+                match_date TEXT NOT NULL,
+                match_time TEXT NOT NULL DEFAULT '',
+                is_playoff BOOLEAN NOT NULL DEFAULT FALSE,
+                home_score INTEGER,
+                away_score INTEGER,
+                status TEXT NOT NULL DEFAULT 'scheduled',
+                api_fixture_id INTEGER,
+                source TEXT
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS predictions (
+                id SERIAL PRIMARY KEY,
+                match_id TEXT NOT NULL,
+                player TEXT NOT NULL,
+                guess_home INTEGER NOT NULL,
+                guess_away INTEGER NOT NULL,
+                points INTEGER NOT NULL DEFAULT 0,
+                bonus INTEGER NOT NULL DEFAULT 0,
+                exact BOOLEAN NOT NULL DEFAULT FALSE,
+                match_finished BOOLEAN NOT NULL DEFAULT FALSE,
+                UNIQUE(match_id, player)
+            )
+            """
+        ]
+    else:
+        queries = [
+            """
+            CREATE TABLE IF NOT EXISTS players (
+                name TEXT PRIMARY KEY,
+                password TEXT NOT NULL DEFAULT '',
+                points INTEGER NOT NULL DEFAULT 0,
+                streak INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS matches (
+                id TEXT PRIMARY KEY,
+                home_team TEXT NOT NULL,
+                away_team TEXT NOT NULL,
+                match_date TEXT NOT NULL,
+                match_time TEXT NOT NULL DEFAULT '',
+                is_playoff INTEGER NOT NULL DEFAULT 0,
+                home_score INTEGER,
+                away_score INTEGER,
+                status TEXT NOT NULL DEFAULT 'scheduled',
+                api_fixture_id INTEGER,
+                source TEXT
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS predictions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL,
+                player TEXT NOT NULL,
+                guess_home INTEGER NOT NULL,
+                guess_away INTEGER NOT NULL,
+                points INTEGER NOT NULL DEFAULT 0,
+                bonus INTEGER NOT NULL DEFAULT 0,
+                exact INTEGER NOT NULL DEFAULT 0,
+                match_finished INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(match_id, player)
+            )
+            """
+        ]
+
+    for query in queries:
+        db_execute(query)
+
+
+def load_players():
+    rows = db_execute(
+        "SELECT name, password, points, streak FROM players ORDER BY name",
+        fetchall=True
+    )
+
+    data = {}
+    for row in rows:
+        row = normalize_row(row)
+        data[row["name"]] = {
+            "password": row.get("password") or "",
+            "points": int(row.get("points") or 0),
+            "streak": int(row.get("streak") or 0)
+        }
 
     return data
 
 
-players = load_players()
-
-
 def save_players():
-    with open(DATA_FILE, "w", encoding="utf-8") as file:
-        json.dump(players, file, ensure_ascii=False, indent=4)
-def load_matches():
-    if os.path.exists(MATCHES_FILE):
-        with open(MATCHES_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
+    global players
 
-    return []
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM players")
+
+        if is_postgres():
+            for name, data in players.items():
+                cur.execute(
+                    """
+                    INSERT INTO players (name, password, points, streak)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        name,
+                        data.get("password", ""),
+                        int(data.get("points", 0)),
+                        int(data.get("streak", 0))
+                    )
+                )
+        else:
+            for name, data in players.items():
+                cur.execute(
+                    """
+                    INSERT INTO players (name, password, points, streak)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        name,
+                        data.get("password", ""),
+                        int(data.get("points", 0)),
+                        int(data.get("streak", 0))
+                    )
+                )
+
+        conn.commit()
+        cur.close()
+
+
+def load_matches():
+    rows = db_execute(
+        """
+        SELECT id, home_team, away_team, match_date, match_time, is_playoff,
+               home_score, away_score, status, api_fixture_id, source
+        FROM matches
+        ORDER BY match_date, match_time
+        """,
+        fetchall=True
+    )
+
+    matches = []
+    for row in rows:
+        row = normalize_row(row)
+        matches.append({
+            "id": row["id"],
+            "home_team": row["home_team"],
+            "away_team": row["away_team"],
+            "match_date": row["match_date"],
+            "match_time": row.get("match_time") or "",
+            "is_playoff": bool(row.get("is_playoff")),
+            "home_score": row.get("home_score"),
+            "away_score": row.get("away_score"),
+            "status": row.get("status") or "scheduled",
+            "api_fixture_id": row.get("api_fixture_id"),
+            "source": row.get("source")
+        })
+
+    return matches
+
 
 def save_matches(matches):
-    with open(MATCHES_FILE, "w", encoding="utf-8") as file:
-        json.dump(matches, file, ensure_ascii=False, indent=4)
-def load_predictions():
-    if os.path.exists(PREDICTIONS_FILE):
-        with open(PREDICTIONS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM matches")
 
-    return []
+        if is_postgres():
+            insert_query = """
+                INSERT INTO matches
+                (id, home_team, away_team, match_date, match_time, is_playoff,
+                 home_score, away_score, status, api_fixture_id, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+        else:
+            insert_query = """
+                INSERT INTO matches
+                (id, home_team, away_team, match_date, match_time, is_playoff,
+                 home_score, away_score, status, api_fixture_id, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+
+        for match in matches:
+            cur.execute(
+                insert_query,
+                (
+                    match.get("id"),
+                    match.get("home_team"),
+                    match.get("away_team"),
+                    match.get("match_date"),
+                    match.get("match_time") or "",
+                    bool(match.get("is_playoff", False)) if is_postgres() else int(bool(match.get("is_playoff", False))),
+                    match.get("home_score"),
+                    match.get("away_score"),
+                    match.get("status", "scheduled"),
+                    match.get("api_fixture_id"),
+                    match.get("source")
+                )
+            )
+
+        conn.commit()
+        cur.close()
+
+
+def load_predictions():
+    rows = db_execute(
+        """
+        SELECT match_id, player, guess_home, guess_away, points, bonus, exact, match_finished
+        FROM predictions
+        ORDER BY id
+        """,
+        fetchall=True
+    )
+
+    predictions = []
+    for row in rows:
+        row = normalize_row(row)
+        predictions.append({
+            "match_id": row["match_id"],
+            "player": row["player"],
+            "guess_home": int(row["guess_home"]),
+            "guess_away": int(row["guess_away"]),
+            "points": int(row.get("points") or 0),
+            "bonus": int(row.get("bonus") or 0),
+            "exact": bool(row.get("exact")),
+            "match_finished": bool(row.get("match_finished"))
+        })
+
+    return predictions
 
 
 def save_predictions(predictions):
-    with open(PREDICTIONS_FILE, "w", encoding="utf-8") as file:
-        json.dump(predictions, file, ensure_ascii=False, indent=4)
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM predictions")
+
+        if is_postgres():
+            insert_query = """
+                INSERT INTO predictions
+                (match_id, player, guess_home, guess_away, points, bonus, exact, match_finished)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """
+        else:
+            insert_query = """
+                INSERT INTO predictions
+                (match_id, player, guess_home, guess_away, points, bonus, exact, match_finished)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
+
+        for prediction in predictions:
+            cur.execute(
+                insert_query,
+                (
+                    prediction.get("match_id"),
+                    prediction.get("player"),
+                    int(prediction.get("guess_home", 0)),
+                    int(prediction.get("guess_away", 0)),
+                    int(prediction.get("points", 0)),
+                    int(prediction.get("bonus", 0)),
+                    bool(prediction.get("exact", False)) if is_postgres() else int(bool(prediction.get("exact", False))),
+                    bool(prediction.get("match_finished", False)) if is_postgres() else int(bool(prediction.get("match_finished", False)))
+                )
+            )
+
+        conn.commit()
+        cur.close()
+
 
 def load_settings():
-    with open(SETTINGS_FILE, "r", encoding="utf-8") as file:
-        return json.load(file)
+    api_key = os.environ.get("API_FOOTBALL_KEY")
+    if api_key:
+        return {"api_football_key": api_key}
+
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as file:
+            return json.load(file)
+
+    return {"api_football_key": ""}
+
+
+init_db()
+players = load_players()
 
 
 def get_api_fixture_by_id(fixture_id):
@@ -1069,4 +1375,4 @@ def admin_test():
         is_playoff=is_playoff
     )
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", debug=True)
