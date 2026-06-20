@@ -13,6 +13,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "temporary_secret_key_for_test")
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Phxyuejhhoakh!")
+AUTO_SYNC_TOKEN = os.environ.get("AUTO_SYNC_TOKEN", "change_me_auto_sync_token")
 NETANYA_TEAM_ID = 4505
 SETTINGS_FILE = "data/settings.json"
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -1374,6 +1375,125 @@ def admin_test():
         guess_away=guess_away,
         is_playoff=is_playoff
     )
+
+def is_valid_cron_token():
+    return request.args.get("token") == AUTO_SYNC_TOKEN
+
+
+@app.route("/cron/update-match-times")
+def cron_update_match_times():
+    if not is_valid_cron_token():
+        return "Unauthorized", 401
+
+    matches = load_matches()
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    updated = 0
+    checked = 0
+
+    for match in matches:
+        if match.get("status") == "finished":
+            continue
+
+        if match.get("match_date") != today:
+            continue
+
+        if not match.get("api_fixture_id"):
+            continue
+
+        checked += 1
+
+        api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
+
+        if not api_fixture:
+            continue
+
+        fixture = api_fixture["fixture"]
+        teams_data = api_fixture["teams"]
+
+        fixture_datetime = datetime.fromisoformat(
+            fixture["date"].replace("Z", "+00:00")
+        )
+
+        local_datetime = fixture_datetime.astimezone()
+
+        match["home_team"] = teams_data["home"]["name"]
+        match["away_team"] = teams_data["away"]["name"]
+        match["match_date"] = local_datetime.strftime("%Y-%m-%d")
+        match["match_time"] = local_datetime.strftime("%H:%M")
+        match["source"] = "api"
+
+        updated += 1
+
+    save_matches(matches)
+
+    return f"Update match times done. checked={checked}, updated={updated}"
+
+
+@app.route("/cron/check-results")
+def cron_check_results():
+    if not is_valid_cron_token():
+        return "Unauthorized", 401
+
+    matches = load_matches()
+    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
+
+    checked = 0
+    finished = 0
+    skipped = 0
+
+    for match in matches:
+        if match.get("status") == "finished":
+            skipped += 1
+            continue
+
+        if match.get("match_date") != today:
+            skipped += 1
+            continue
+
+        if not match.get("api_fixture_id"):
+            skipped += 1
+            continue
+
+        match_time = match.get("match_time", "")
+
+        if not match_time:
+            skipped += 1
+            continue
+
+        match_datetime = datetime.strptime(
+            match["match_date"] + " " + match_time,
+            "%Y-%m-%d %H:%M"
+        )
+
+        if now < match_datetime:
+            skipped += 1
+            continue
+
+        checked += 1
+
+        api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
+
+        if not api_fixture:
+            continue
+
+        fixture = api_fixture["fixture"]
+        goals = api_fixture["goals"]
+        status = fixture["status"]["short"]
+
+        if status == "FT" and goals["home"] is not None and goals["away"] is not None:
+            finish_match_and_calculate(
+                match,
+                goals["home"],
+                goals["away"]
+            )
+
+            finished += 1
+
+    save_matches(matches)
+
+    return f"Check results done. checked={checked}, finished={finished}, skipped={skipped}"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
