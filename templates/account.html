@@ -180,7 +180,7 @@
 
 <h3>מחיקת משתמש</h3>
 
-<form method="POST" onsubmit="return confirm('בטוח שאתה רוצה למחוק את המשתמש שלך? פעולה זו לא ניתנת לביטול');">
+<form method="POST" action="{{ url_for('Home') }}" onsubmit="return confirm('בטוח שאתה רוצה למחוק את המשתמש שלך? פעולה זו לא ניתנת לביטול');">
     <label>הכנס סיסמה לאישור:</label>
     <input type="password" name="delete_password" required>
 
