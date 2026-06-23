@@ -25,7 +25,7 @@ tomorrow = today + timedelta(days=1)
 today = datetime.now().date()
 
 params = {
-    "country": "Israel"
+    "date": "2026-08-22"
 }
 
 response = requests.get(url, headers=headers, params=params)

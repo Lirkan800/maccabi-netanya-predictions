@@ -661,7 +661,7 @@ def calculate_match_points(guess_home, guess_away, actual_home, actual_away, is_
     )
 
     if exact_score:
-        return 3 if is_playoff else 2, True
+        return 4 if is_playoff else 3, True
 
     if correct_direction:
         return 2 if is_playoff else 1, False
@@ -1217,8 +1217,8 @@ def admin_matches():
                         if is_exact:
                             players[player_name]["streak"] += 1
 
-                            if players[player_name]["streak"] == 3:
-                                bonus = 6
+                            if players[player_name]["streak"] == 2:
+                                bonus = 4
                                 players[player_name]["streak"] = 0
                         else:
                             players[player_name]["streak"] = 0
@@ -1345,7 +1345,7 @@ def admin_test():
             exact_score = actual_home == guess_home and actual_away == guess_away
             correct_direction = get_outcome(actual_home, actual_away) == get_outcome(guess_home, guess_away)
 
-            exact_points = 3 if is_playoff else 2
+            exact_points = 3
             direction_points = 2 if is_playoff else 1
 
             points = 0
@@ -1358,7 +1358,7 @@ def admin_test():
                 if players[selected_player]["streak"] == 2:
                     bonus = 4
                     players[selected_player]["streak"] = 0
-                    points_text = f"פגיעה מדויקת! +{points} וגם בונוס +6"
+                    points_text = f"פגיעה מדויקת! +{points} וגם בונוס +4"
                 else:
                     points_text = f"פגיעה מדויקת! +{points}. רצף: {players[selected_player]['streak']}"
 

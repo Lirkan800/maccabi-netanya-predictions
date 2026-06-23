@@ -473,8 +473,8 @@ def finish_match_and_calculate(match_to_finish, actual_home, actual_away):
             if is_exact:
                 players[player_name]["streak"] += 1
 
-                if players[player_name]["streak"] == 3:
-                    bonus = 6
+                if players[player_name]["streak"] == 2:
+                    bonus = 4
                     players[player_name]["streak"] = 0
             else:
                 players[player_name]["streak"] = 0
@@ -731,6 +731,7 @@ def login():
             error = "סיסמה שגויה"
         else:
             session["username"] = username
+            session.permanent = False
             return redirect(url_for("home"))
 
     return render_template("login.html", error=error)
@@ -753,6 +754,13 @@ def logout():
         return "", 204
 
     return redirect(url_for("leaderboard"))
+
+
+@app.route("/auto-logout", methods=["POST"])
+def auto_logout():
+    session.pop("username", None)
+    return "", 204
+
 @app.route("/rules")
 @login_required
 def rules():
@@ -1347,8 +1355,8 @@ def admin_test():
                 points = exact_points
                 players[selected_player]["streak"] += 1
 
-                if players[selected_player]["streak"] == 3:
-                    bonus = 6
+                if players[selected_player]["streak"] == 2:
+                    bonus = 4
                     players[selected_player]["streak"] = 0
                     points_text = f"פגיעה מדויקת! +{points} וגם בונוס +6"
                 else:
