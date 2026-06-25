@@ -26,33 +26,28 @@
     }
 
        .header {
-    position: relative;
-    overflow: hidden;
-    padding: 0;
-    text-align: center;
-    color: white;
-    background: #050505;
-    border-bottom: 2px solid rgba(255,212,0,0.65);
-
-    height: clamp(230px, 28vw, 380px);
-}
-
-        .header::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            z-index: 1;
-            background:
+            position: relative;
+            overflow: hidden;
+            padding: 0;
+            text-align: center;
+            color: white;
+            background-color: #050505;
+            background-image:
                 linear-gradient(
                     to bottom,
                     rgba(0,0,0,0.02),
                     rgba(0,0,0,0.08) 58%,
                     rgba(0,0,0,0.36) 100%
-                );
-            pointer-events: none;
+                ),
+                url("{{ url_for('static', filename='HeroBanner.png') }}");
+            background-size: cover, cover;
+            background-position: center center, center center;
+            background-repeat: no-repeat, no-repeat;
+            border-bottom: 2px solid rgba(255,212,0,0.65);
+            height: clamp(230px, 28vw, 380px);
         }
 
-        .header::after {
+        .header::before {
             content: "";
             position: absolute;
             left: 0;
@@ -65,18 +60,7 @@
         }
 
         .hero-logo {
-            position: relative;
-            z-index: 0;
-            display: block;
-            width: 100%;
-            height: 100%;
-            min-height: 100%;
-            max-width: 100%;
-            margin: 0;
-            border-radius: 0;
-            box-shadow: none;
-            object-fit: cover;
-            object-position: center center;
+            display: none;
         }
 
         .user-box {
@@ -229,20 +213,16 @@
     }
 
     .header {
-    height: 155px;
-    min-height: 155px;
-    max-height: 155px;
-    padding: 0;
-}
+        height: 155px;
+        min-height: 155px;
+        max-height: 155px;
+        padding: 0;
+        background-size: cover, cover;
+        background-position: center center, center center;
+    }
 
     .hero-logo {
-        width: 100%;
-        height: 100%;
-        max-width: 100%;
-        border-radius: 0;
-        box-shadow: none;
-        object-fit: cover;
-        object-position: center center;
+        display: none;
     }
 
     .user-box {
@@ -376,13 +356,7 @@
 
 <body>
 
-<div class="header">
-    <img src="{{ url_for('static', filename='HeroBanner.png') }}"
-     alt="האימפריה עוד תחזור"
-     class="hero-logo"
-     loading="eager"
-     decoding="sync">
-</div>
+<div class="header" aria-label="האימפריה עוד תחזור"></div>
 
 {% if current_user %}
     <div class="user-box">
