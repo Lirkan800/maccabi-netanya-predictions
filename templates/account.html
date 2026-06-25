@@ -48,6 +48,32 @@
     text-align: center;
 }
 
+.prediction-divider {
+    margin: 20px auto;
+    border: none;
+    border-top: 1px solid rgba(255,212,0,0.25);
+    max-width: 520px;
+}
+
+.current-prediction {
+    margin-top: 10px;
+}
+
+.current-prediction h3 {
+    color: #ffd400;
+    margin-bottom: 10px;
+}
+
+.prediction-score {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.no-prediction {
+    color: #ffb74d;
+    font-weight: bold;
+}
+
 .action-row {
     display: flex;
     justify-content: center;
@@ -111,6 +137,10 @@
         line-height: 1.5;
     }
 
+    .prediction-score {
+        font-size: 15px !important;
+    }
+
     .action-row {
         gap: 8px;
         margin-top: 14px;
@@ -124,7 +154,6 @@
         text-align: center;
     }
 }
-
 </style>
 
 <div class="card">
@@ -162,14 +191,34 @@
             </h3>
 
             <p>
-                📅  {{ next_match.display_date }}
+                📅 {{ next_match.display_date }}
                 |
-                🕒  {{ next_match.match_time if next_match.match_time else 'טרם נקבעה' }}
+                🕒 {{ next_match.match_time if next_match.match_time else 'טרם נקבעה' }}
             </p>
 
             {% if next_match.is_playoff %}
                 <p>🔥 משחק פלייאוף — ניקוד מוגדל</p>
             {% endif %}
+
+            <hr class="prediction-divider">
+
+            <div class="current-prediction">
+                <h3>🎯 הניחוש שלך</h3>
+
+                {% if current_prediction %}
+                    <p class="prediction-score">
+                        {{ next_match.home_team }}
+                        <strong>{{ current_prediction.guess_home }}</strong>
+                        -
+                        <strong>{{ current_prediction.guess_away }}</strong>
+                        {{ next_match.away_team }}
+                    </p>
+                {% else %}
+                    <p class="no-prediction">
+                        ⚠️ עוד לא הוכנס ניחוש למשחק זה
+                    </p>
+                {% endif %}
+            </div>
         {% else %}
             <p>אין כרגע משחק פתוח לניחוש.</p>
         {% endif %}

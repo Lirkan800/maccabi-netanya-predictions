@@ -696,11 +696,25 @@ def calculate_match_points(guess_home, guess_away, actual_home, actual_away, is_
 @login_required
 def home():
     auto_check_results_if_needed()
+
     username = current_user()
     data = players[username]
 
     leaderboard_data = get_leaderboard()
     next_match = get_next_match()
+
+    current_prediction = None
+
+    if next_match:
+        predictions_list = load_predictions()
+
+        for prediction in predictions_list:
+            if (
+                prediction["player"] == username
+                and prediction["match_id"] == next_match["id"]
+            ):
+                current_prediction = prediction
+                break
 
     return render_template(
         "account.html",
@@ -709,8 +723,10 @@ def home():
         streak=data["streak"],
         rank=get_user_rank(username),
         next_match=next_match,
+        current_prediction=current_prediction,
         leaderboard=leaderboard_data
-)
+    )
+
 @app.route("/join", methods=["GET", "POST"])
 def join():
     error = None
