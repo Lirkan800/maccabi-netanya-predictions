@@ -268,10 +268,36 @@
         <br>
 
         {% if locked %}
-            <div class="card">
-                <p class="error">🔒 הניחושים למשחק הזה ננעלו.</p>
-            </div>
+    <div class="card">
+        <p class="error">🔒 הניחושים למשחק הזה ננעלו.</p>
+
+        <h3>👀 ניחושי המשתתפים</h3>
+
+        {% if locked_predictions %}
+            <table>
+                <tr>
+                    <th>משתתף</th>
+                    <th>ניחוש</th>
+                </tr>
+
+                {% for prediction in locked_predictions %}
+                <tr>
+                    <td>{{ prediction.player }}</td>
+                    <td>
+                        {{ match.home_team }}
+                        {{ prediction.guess_home }}
+                        -
+                        {{ prediction.guess_away }}
+                        {{ match.away_team }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
         {% else %}
+            <p>עדיין לא נשלחו ניחושים למשחק הזה.</p>
+        {% endif %}
+    </div>
+{% else %}
             <div class="card">
                 <h2>🎯 הניחוש שלך</h2>
 

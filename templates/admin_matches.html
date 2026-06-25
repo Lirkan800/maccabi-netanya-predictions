@@ -88,6 +88,7 @@
                 <th>פלייאוף</th>
                 <th>תוצאה</th>
                 <th>סטטוס</th>
+                <th>חיבור API</th>
                 <th>סיום משחק</th>
                 <th>מחיקה</th>
             </tr>
@@ -110,7 +111,14 @@
                 </td>
 
                 <td>{{ match.status }}</td>
-
+                <td>
+                    {% if match.api_fixture_id %}
+                        <span class="success">✅ מחובר</span><br>
+                        <small>Fixture ID: {{ match.api_fixture_id }}</small>
+                    {% else %}
+                        <span class="error">❌ לא מחובר</span>
+                    {% endif %}
+                </td>
                <td>
     {% if match.status == "finished" %}
         חושב
