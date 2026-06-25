@@ -29,18 +29,42 @@ teams = [
 
 TEAM_LOGOS = {
     "מכבי נתניה": "מכבי נתניה.png",
+
     "בני סכנין": "בני סכנין.png",
-    "בית\"ר י-ם": "ביתר ירושלים.png",
+
+    "ביתר ירושלים": "ביתר ירושלים.png",
+    "בית״ר ירושלים": "ביתר ירושלים.png",
     "בית\"ר ירושלים": "ביתר ירושלים.png",
+    "בית\"ר י-ם": "ביתר ירושלים.png",
+
     "מכבי חיפה": "מכבי חיפה.png",
+
+    "מכבי תל אביב": "מכבי תל אביב.png",
     "מכבי ת\"א": "מכבי תל אביב.png",
-    "הפועל חיפה": "הפועל חיפה.png",
+
+    "הפועל באר שבע": "הפועל באר שבע.png",
     "הפועל ב\"ש": "הפועל באר שבע.png",
+
+    "הפועל תל אביב": "הפועל תל אביב.png",
     "הפועל ת\"א": "הפועל תל אביב.png",
+
+    "הפועל חיפה": "הפועל חיפה.png",
+    "הפועל ירושלים": "הפועל ירושלים.png",
+
+    "מכבי פתח תקווה": "מכבי פתח תקווה.png",
     "מכבי פ\"ת": "מכבי פתח תקווה.png",
+
+    "הפועל פתח תקווה": "הפועל פתח תקווה.png",
     "הפועל פ\"ת": "הפועל פתח תקווה.png",
+
+    "הפועל רמת גן": "הפועל רמת גן.png",
     "הפועל ר\"ג": "הפועל רמת גן.png",
+
+    "עירוני קריית שמונה": "הפועל קריית שמונה.png",
+    "הפועל קריית שמונה": "הפועל קריית שמונה.png",
     "הפועל ק\"ש": "הפועל קריית שמונה.png",
+
+    "עירוני טבריה": "עירוני טבריה.png",
     "עירוני דורות טבריה": "עירוני טבריה.png"
 }
 
@@ -877,6 +901,7 @@ def statistics():
     )
 @app.route("/predictions", methods=["GET", "POST"])
 @login_required
+
 def predictions():
     username = current_user()
     match = get_next_match()
@@ -949,10 +974,31 @@ def predictions():
                 existing_prediction = True
 
     if locked:
-        locked_predictions = [
-            prediction for prediction in predictions_list
-            if prediction["match_id"] == match["id"]
-        ]
+        for player_name in players:
+            player_prediction = None
+
+            for prediction in predictions_list:
+                if (
+                    prediction["match_id"] == match["id"]
+                    and prediction["player"] == player_name
+                ):
+                    player_prediction = prediction
+                    break
+
+            if player_prediction:
+                locked_predictions.append({
+                    "player": player_name,
+                    "guessed": True,
+                    "guess_home": player_prediction["guess_home"],
+                    "guess_away": player_prediction["guess_away"]
+                })
+            else:
+                locked_predictions.append({
+                    "player": player_name,
+                    "guessed": False,
+                    "guess_home": None,
+                    "guess_away": None
+                })
 
     return render_template(
         "predictions.html",
