@@ -394,5 +394,27 @@
     {% endblock %}
 </div>
 
+<script>
+let internalNavigation = false;
+
+document.addEventListener("click", function (e) {
+    const link = e.target.closest("a");
+
+    if (link && link.href && link.href.startsWith(window.location.origin)) {
+        internalNavigation = true;
+    }
+});
+
+document.addEventListener("submit", function () {
+    internalNavigation = true;
+});
+
+document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden" && !internalNavigation) {
+        navigator.sendBeacon("/auto-logout");
+    }
+});
+</script>
+
 </body>
 </html>
