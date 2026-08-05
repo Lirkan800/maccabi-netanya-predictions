@@ -199,7 +199,15 @@
 </style>
 
 <div class="card">
+    {% if is_live %}
+    <h2>🔴 משחק חי כרגע</h2>
+
+    <p style="text-align: center; font-weight: bold;">
+        הניחושים נעולים. הניקוד יחושב אוטומטית בסיום המשחק.
+    </p>
+{% else %}
     <h2>⚽ המשחק הקרוב</h2>
+{% endif %}
 
     {% if error %}
     <div style="background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.45); color: #ff8a8a; padding: 14px 18px; border-radius: 14px; font-weight: bold; text-align: center; margin-bottom: 18px;">
@@ -273,8 +281,16 @@
         <br>
 
         {% if locked %}
-            <div class="card">
-                <p class="error">🔒 הניחושים למשחק הזה ננעלו.</p>
+    <div class="card">
+        {% if is_live %}
+            <p class="error">
+                🔴 המשחק בעיצומו — הניחושים נעולים.
+            </p>
+        {% else %}
+            <p class="error">
+                🔒 הניחושים למשחק הזה ננעלו.
+            </p>
+        {% endif %}
 
                 <h3>👀 ניחושי המשתתפים</h3>
 

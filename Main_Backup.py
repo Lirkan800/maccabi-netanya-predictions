@@ -29,18 +29,42 @@ teams = [
 
 TEAM_LOGOS = {
     "מכבי נתניה": "מכבי נתניה.png",
+
     "בני סכנין": "בני סכנין.png",
-    "בית\"ר י-ם": "ביתר ירושלים.png",
+
+    "ביתר ירושלים": "ביתר ירושלים.png",
+    "בית״ר ירושלים": "ביתר ירושלים.png",
     "בית\"ר ירושלים": "ביתר ירושלים.png",
+    "בית\"ר י-ם": "ביתר ירושלים.png",
+
     "מכבי חיפה": "מכבי חיפה.png",
+
+    "מכבי תל אביב": "מכבי תל אביב.png",
     "מכבי ת\"א": "מכבי תל אביב.png",
-    "הפועל חיפה": "הפועל חיפה.png",
+
+    "הפועל באר שבע": "הפועל באר שבע.png",
     "הפועל ב\"ש": "הפועל באר שבע.png",
+
+    "הפועל תל אביב": "הפועל תל אביב.png",
     "הפועל ת\"א": "הפועל תל אביב.png",
+
+    "הפועל חיפה": "הפועל חיפה.png",
+    "הפועל ירושלים": "הפועל ירושלים.png",
+
+    "מכבי פתח תקווה": "מכבי פתח תקווה.png",
     "מכבי פ\"ת": "מכבי פתח תקווה.png",
+
+    "הפועל פתח תקווה": "הפועל פתח תקווה.png",
     "הפועל פ\"ת": "הפועל פתח תקווה.png",
+
+    "הפועל רמת גן": "הפועל רמת גן.png",
     "הפועל ר\"ג": "הפועל רמת גן.png",
+
+    "עירוני קריית שמונה": "הפועל קריית שמונה.png",
+    "הפועל קריית שמונה": "הפועל קריית שמונה.png",
     "הפועל ק\"ש": "הפועל קריית שמונה.png",
+
+    "עירוני טבריה": "עירוני טבריה.png",
     "עירוני דורות טבריה": "עירוני טבריה.png"
 }
 
@@ -661,7 +685,7 @@ def calculate_match_points(guess_home, guess_away, actual_home, actual_away, is_
     )
 
     if exact_score:
-        return 3 if is_playoff else 2, True
+        return 4 if is_playoff else 3, True
 
     if correct_direction:
         return 2 if is_playoff else 1, False
@@ -672,11 +696,25 @@ def calculate_match_points(guess_home, guess_away, actual_home, actual_away, is_
 @login_required
 def home():
     auto_check_results_if_needed()
+
     username = current_user()
     data = players[username]
 
     leaderboard_data = get_leaderboard()
     next_match = get_next_match()
+
+    current_prediction = None
+
+    if next_match:
+        predictions_list = load_predictions()
+
+        for prediction in predictions_list:
+            if (
+                prediction["player"] == username
+                and prediction["match_id"] == next_match["id"]
+            ):
+                current_prediction = prediction
+                break
 
     return render_template(
         "account.html",
@@ -685,8 +723,10 @@ def home():
         streak=data["streak"],
         rank=get_user_rank(username),
         next_match=next_match,
+        current_prediction=current_prediction,
         leaderboard=leaderboard_data
-)
+    )
+
 @app.route("/join", methods=["GET", "POST"])
 def join():
     error = None
@@ -785,12 +825,17 @@ def Home():
             session.pop("username", None)
             return redirect(url_for("login"))
 
+    next_match = get_next_match()
+    leaderboard_data = get_leaderboard()
+
     return render_template(
         "account.html",
         username=username,
         points=data["points"],
         streak=data["streak"],
         rank=get_user_rank(username),
+        next_match=next_match,
+        leaderboard=leaderboard_data,
         error=error
     )
 
@@ -883,6 +928,7 @@ def predictions():
     existing_prediction = None
     existing_home = ""
     existing_away = ""
+    locked_predictions = []
 
     if not match:
         return render_template(
@@ -893,7 +939,8 @@ def predictions():
             success=None,
             existing_prediction=None,
             existing_home="",
-            existing_away=""
+            existing_away="",
+            locked_predictions=[]
         )
 
     predictions_list = load_predictions()
@@ -928,7 +975,11 @@ def predictions():
                         "match_id": match["id"],
                         "player": username,
                         "guess_home": guess_home,
-                        "guess_away": guess_away
+                        "guess_away": guess_away,
+                        "points": 0,
+                        "bonus": 0,
+                        "exact": False,
+                        "match_finished": False
                     })
                     success = "הניחוש נשמר בהצלחה"
 
@@ -937,6 +988,33 @@ def predictions():
                 existing_home = guess_home
                 existing_away = guess_away
                 existing_prediction = True
+
+    if locked:
+        for player_name in players:
+            player_prediction = None
+
+            for prediction in predictions_list:
+                if (
+                    prediction["match_id"] == match["id"]
+                    and prediction["player"] == player_name
+                ):
+                    player_prediction = prediction
+                    break
+
+            if player_prediction:
+                locked_predictions.append({
+                    "player": player_name,
+                    "guessed": True,
+                    "guess_home": player_prediction["guess_home"],
+                    "guess_away": player_prediction["guess_away"]
+                })
+            else:
+                locked_predictions.append({
+                    "player": player_name,
+                    "guessed": False,
+                    "guess_home": None,
+                    "guess_away": None
+                })
 
     return render_template(
         "predictions.html",
@@ -947,6 +1025,7 @@ def predictions():
         existing_prediction=existing_prediction,
         existing_home=existing_home,
         existing_away=existing_away,
+        locked_predictions=locked_predictions,
         home_logo=TEAM_LOGOS.get(match["home_team"]),
         away_logo=TEAM_LOGOS.get(match["away_team"])
     )
@@ -1217,8 +1296,8 @@ def admin_matches():
                         if is_exact:
                             players[player_name]["streak"] += 1
 
-                            if players[player_name]["streak"] == 3:
-                                bonus = 6
+                            if players[player_name]["streak"] == 2:
+                                bonus = 4
                                 players[player_name]["streak"] = 0
                         else:
                             players[player_name]["streak"] = 0
@@ -1345,7 +1424,7 @@ def admin_test():
             exact_score = actual_home == guess_home and actual_away == guess_away
             correct_direction = get_outcome(actual_home, actual_away) == get_outcome(guess_home, guess_away)
 
-            exact_points = 3 if is_playoff else 2
+            exact_points = 4 if is_playoff else 3
             direction_points = 2 if is_playoff else 1
 
             points = 0
@@ -1358,7 +1437,7 @@ def admin_test():
                 if players[selected_player]["streak"] == 2:
                     bonus = 4
                     players[selected_player]["streak"] = 0
-                    points_text = f"פגיעה מדויקת! +{points} וגם בונוס +6"
+                    points_text = f"פגיעה מדויקת! +{points} וגם בונוס +4"
                 else:
                     points_text = f"פגיעה מדויקת! +{points}. רצף: {players[selected_player]['streak']}"
 
@@ -1433,8 +1512,6 @@ def cron_update_match_times():
 
         local_datetime = fixture_datetime.astimezone()
 
-        match["home_team"] = teams_data["home"]["name"]
-        match["away_team"] = teams_data["away"]["name"]
         match["match_date"] = local_datetime.strftime("%Y-%m-%d")
         match["match_time"] = local_datetime.strftime("%H:%M")
         match["source"] = "api"
@@ -1511,12 +1588,67 @@ def cron_check_results():
 
     return f"Check results done. checked={checked}, finished={finished}, skipped={skipped}"
 
+def auto_attach_fixture_if_needed(matches):
+    today = datetime.now().strftime("%Y-%m-%d")
+    changed = False
+
+    fixtures_cache = {}
+
+    for match in matches:
+        if match.get("status") == "finished":
+            continue
+
+        if match.get("match_date") != today:
+            continue
+
+        if match.get("api_fixture_id"):
+            continue
+
+        match_date = match.get("match_date")
+
+        if not match_date:
+            continue
+
+        if match_date not in fixtures_cache:
+            fixtures, api_errors = get_api_fixtures_by_date(match_date)
+            fixtures_cache[match_date] = fixtures
+
+        fixtures = fixtures_cache[match_date]
+
+        for api_fixture in fixtures:
+            fixture = api_fixture["fixture"]
+            teams_data = api_fixture["teams"]
+
+            home_id = teams_data["home"]["id"]
+            away_id = teams_data["away"]["id"]
+
+            if home_id == NETANYA_TEAM_ID or away_id == NETANYA_TEAM_ID:
+                fixture_datetime = datetime.fromisoformat(
+                    fixture["date"].replace("Z", "+00:00")
+                )
+
+                local_datetime = fixture_datetime.astimezone()
+
+                match["api_fixture_id"] = fixture["id"]
+                match["source"] = "api"
+                match["match_date"] = local_datetime.strftime("%Y-%m-%d")
+                match["match_time"] = local_datetime.strftime("%H:%M")
+                match["status"] = "scheduled"
+
+                changed = True
+                break
+
+    return changed
+
 def auto_check_results_if_needed():
     matches = load_matches()
     today = datetime.now().strftime("%Y-%m-%d")
     now = datetime.now()
 
     changed = False
+
+    if auto_attach_fixture_if_needed(matches):
+        changed = True
 
     for match in matches:
         if match.get("status") == "finished":
@@ -1537,7 +1669,6 @@ def auto_check_results_if_needed():
             "%Y-%m-%d %H:%M"
         )
 
-        # בודק רק אחרי שעברו לפחות שעתיים מתחילת המשחק
         if now < match_datetime + timedelta(hours=2):
             continue
 
@@ -1555,6 +1686,5 @@ def auto_check_results_if_needed():
 
     if changed:
         save_matches(matches)
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
