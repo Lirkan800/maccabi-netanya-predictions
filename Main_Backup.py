@@ -139,6 +139,8 @@ def init_db():
                 id TEXT PRIMARY KEY,
                 home_team TEXT NOT NULL,
                 away_team TEXT NOT NULL,
+                home_team_id INTEGER,
+                away_team_id INTEGER,
                 match_date TEXT NOT NULL,
                 match_time TEXT NOT NULL DEFAULT '',
                 is_playoff BOOLEAN NOT NULL DEFAULT FALSE,
@@ -179,6 +181,8 @@ def init_db():
                 id TEXT PRIMARY KEY,
                 home_team TEXT NOT NULL,
                 away_team TEXT NOT NULL,
+                home_team_id INTEGER,
+                away_team_id INTEGER,
                 match_date TEXT NOT NULL,
                 match_time TEXT NOT NULL DEFAULT '',
                 is_playoff INTEGER NOT NULL DEFAULT 0,
@@ -207,6 +211,23 @@ def init_db():
 
     for query in queries:
         db_execute(query)
+
+    # Existing installations may have been created before team IDs were stored.
+    # Add the columns safely without deleting or rebuilding any existing data.
+    if is_postgres():
+        db_execute("ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_team_id INTEGER")
+        db_execute("ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_team_id INTEGER")
+    else:
+        with get_db_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("PRAGMA table_info(matches)")
+            existing_columns = {row[1] for row in cur.fetchall()}
+            if "home_team_id" not in existing_columns:
+                cur.execute("ALTER TABLE matches ADD COLUMN home_team_id INTEGER")
+            if "away_team_id" not in existing_columns:
+                cur.execute("ALTER TABLE matches ADD COLUMN away_team_id INTEGER")
+            conn.commit()
+            cur.close()
 
 
 def load_players():
@@ -270,8 +291,9 @@ def save_players():
 def load_matches():
     rows = db_execute(
         """
-        SELECT id, home_team, away_team, match_date, match_time, is_playoff,
-               home_score, away_score, status, api_fixture_id, source
+        SELECT id, home_team, away_team, home_team_id, away_team_id,
+               match_date, match_time, is_playoff, home_score, away_score,
+               status, api_fixture_id, source
         FROM matches
         ORDER BY match_date, match_time
         """,
@@ -285,6 +307,8 @@ def load_matches():
             "id": row["id"],
             "home_team": row["home_team"],
             "away_team": row["away_team"],
+            "home_team_id": row.get("home_team_id"),
+            "away_team_id": row.get("away_team_id"),
             "match_date": row["match_date"],
             "match_time": row.get("match_time") or "",
             "is_playoff": bool(row.get("is_playoff")),
@@ -306,16 +330,18 @@ def save_matches(matches):
         if is_postgres():
             insert_query = """
                 INSERT INTO matches
-                (id, home_team, away_team, match_date, match_time, is_playoff,
-                 home_score, away_score, status, api_fixture_id, source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (id, home_team, away_team, home_team_id, away_team_id,
+                 match_date, match_time, is_playoff, home_score, away_score,
+                 status, api_fixture_id, source)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
         else:
             insert_query = """
                 INSERT INTO matches
-                (id, home_team, away_team, match_date, match_time, is_playoff,
-                 home_score, away_score, status, api_fixture_id, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, home_team, away_team, home_team_id, away_team_id,
+                 match_date, match_time, is_playoff, home_score, away_score,
+                 status, api_fixture_id, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
         for match in matches:
@@ -325,6 +351,8 @@ def save_matches(matches):
                     match.get("id"),
                     match.get("home_team"),
                     match.get("away_team"),
+                    match.get("home_team_id"),
+                    match.get("away_team_id"),
                     match.get("match_date"),
                     match.get("match_time") or "",
                     bool(match.get("is_playoff", False)) if is_postgres() else int(bool(match.get("is_playoff", False))),
@@ -463,6 +491,115 @@ def get_api_fixtures_by_date(match_date):
 
     return data.get("response", []), data.get("errors", {})
 
+
+
+def _normalize_team_name(name):
+    return "".join(ch.lower() for ch in (name or "") if ch.isalnum())
+
+
+def _is_netanya_name(name):
+    normalized = _normalize_team_name(name)
+    return "נתניה" in normalized or "maccabinetanya" in normalized
+
+
+def sync_match_order_from_api(match, api_fixture, only_before_kickoff=True):
+    """
+    Synchronize the local home/away order with API-Football.
+
+    API team IDs are the primary source of truth. For older manually-created
+    matches that do not yet have IDs, the function uses the local Netanya name
+    only once to determine which side was originally displayed. It then stores
+    the official IDs, so every later synchronization is ID-based.
+
+    If the order is reversed, all unfinished predictions are reversed as well,
+    preserving the meaning of each user's original prediction. By default no
+    change is allowed after kickoff.
+
+    Returns True when the match or its predictions were changed.
+    """
+    fixture = api_fixture.get("fixture", {})
+    teams_data = api_fixture.get("teams", {})
+    api_home = teams_data.get("home", {})
+    api_away = teams_data.get("away", {})
+
+    api_home_id = api_home.get("id")
+    api_away_id = api_away.get("id")
+    api_home_name = api_home.get("name")
+    api_away_name = api_away.get("name")
+
+    if api_home_id is None or api_away_id is None:
+        return False
+
+    fixture_date = fixture.get("date")
+    if only_before_kickoff and fixture_date:
+        kickoff = datetime.fromisoformat(fixture_date.replace("Z", "+00:00")).astimezone()
+        if datetime.now(kickoff.tzinfo) >= kickoff:
+            return False
+
+    current_home = match.get("home_team", "")
+    current_away = match.get("away_team", "")
+    current_home_id = match.get("home_team_id")
+    current_away_id = match.get("away_team_id")
+
+    reversed_order = False
+
+    # Preferred path: compare stable API team IDs.
+    if current_home_id is not None and current_away_id is not None:
+        reversed_order = (
+            int(current_home_id) == int(api_away_id)
+            and int(current_away_id) == int(api_home_id)
+        )
+    else:
+        # One-time fallback for old/manual rows that predate the ID columns.
+        # The API ID still determines Netanya's official side; the local name is
+        # used only to identify which side users saw when they made predictions.
+        api_netanya_is_home = int(api_home_id) == NETANYA_TEAM_ID
+        api_netanya_is_away = int(api_away_id) == NETANYA_TEAM_ID
+        local_netanya_is_home = _is_netanya_name(current_home)
+        local_netanya_is_away = _is_netanya_name(current_away)
+
+        reversed_order = (
+            (api_netanya_is_home and local_netanya_is_away)
+            or (api_netanya_is_away and local_netanya_is_home)
+        )
+
+    changed = False
+
+    if reversed_order:
+        predictions_list = load_predictions()
+        predictions_changed = False
+
+        for prediction in predictions_list:
+            if prediction.get("match_id") == match.get("id") and not prediction.get("match_finished"):
+                prediction["guess_home"], prediction["guess_away"] = (
+                    prediction.get("guess_away", 0),
+                    prediction.get("guess_home", 0),
+                )
+                predictions_changed = True
+
+        if predictions_changed:
+            save_predictions(predictions_list)
+
+        # Keep local/Hebrew labels and logos, but put them on the official sides.
+        match["home_team"], match["away_team"] = current_away, current_home
+        changed = True
+    elif not current_home or not current_away:
+        match["home_team"] = api_home_name or current_home
+        match["away_team"] = api_away_name or current_away
+        changed = True
+
+    # Persist official IDs on every successful pre-kickoff synchronization.
+    # This prevents repeated name-based decisions and makes future checks exact.
+    if match.get("home_team_id") != api_home_id:
+        match["home_team_id"] = api_home_id
+        changed = True
+
+    if match.get("away_team_id") != api_away_id:
+        match["away_team_id"] = api_away_id
+        changed = True
+
+    return changed
+
 def finish_match_and_calculate(match_to_finish, actual_home, actual_away):
     predictions_list = load_predictions()
 
@@ -515,6 +652,55 @@ def finish_match_and_calculate(match_to_finish, actual_home, actual_away):
 
     save_players()
     save_predictions(predictions_list)
+
+def get_live_match():
+    """
+    מחזיר משחק שכבר התחיל ועדיין לא סומן כ-finished.
+    לא מתבצעת כאן שום משיכת API נוספת.
+    """
+    matches = load_matches()
+    live_matches = []
+    now = datetime.now()
+
+    for match in matches:
+        if match.get("status") != "scheduled":
+            continue
+
+        match_date = match.get("match_date", "")
+        match_time = match.get("match_time", "")
+
+        if not match_date:
+            continue
+
+        if not match_time:
+            match_time = "00:00"
+
+        try:
+            match_datetime = datetime.strptime(
+                f"{match_date} {match_time}",
+                "%Y-%m-%d %H:%M"
+            )
+        except ValueError:
+            continue
+
+        if match_datetime <= now:
+            live_matches.append((match_datetime, match))
+
+    if not live_matches:
+        return None
+
+    # במקרה חריג שיש יותר ממשחק אחד שלא נסגר,
+    # מציגים את המשחק שהתחיל לאחרונה.
+    live_matches.sort(key=lambda item: item[0], reverse=True)
+    live_match = live_matches[0][1]
+
+    date_obj = datetime.strptime(
+        live_match["match_date"],
+        "%Y-%m-%d"
+    )
+    live_match["display_date"] = date_obj.strftime("%d/%m/%Y")
+
+    return live_match
 
 def get_next_match():
     matches = load_matches()
@@ -701,17 +887,20 @@ def home():
     data = players[username]
 
     leaderboard_data = get_leaderboard()
-    next_match = get_next_match()
+
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    displayed_match = live_match or next_match
 
     current_prediction = None
 
-    if next_match:
+    if displayed_match:
         predictions_list = load_predictions()
 
         for prediction in predictions_list:
             if (
                 prediction["player"] == username
-                and prediction["match_id"] == next_match["id"]
+                and prediction["match_id"] == displayed_match["id"]
             ):
                 current_prediction = prediction
                 break
@@ -723,6 +912,7 @@ def home():
         streak=data["streak"],
         rank=get_user_rank(username),
         next_match=next_match,
+        live_match=live_match,
         current_prediction=current_prediction,
         leaderboard=leaderboard_data
     )
@@ -825,8 +1015,23 @@ def Home():
             session.pop("username", None)
             return redirect(url_for("login"))
 
-    next_match = get_next_match()
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    displayed_match = live_match or next_match
+
     leaderboard_data = get_leaderboard()
+    current_prediction = None
+
+    if displayed_match:
+        predictions_list = load_predictions()
+
+        for prediction in predictions_list:
+            if (
+                    prediction["player"] == username
+                    and prediction["match_id"] == displayed_match["id"]
+            ):
+                current_prediction = prediction
+                break
 
     return render_template(
         "account.html",
@@ -835,6 +1040,8 @@ def Home():
         streak=data["streak"],
         rank=get_user_rank(username),
         next_match=next_match,
+        live_match=live_match,
+        current_prediction=current_prediction,
         leaderboard=leaderboard_data,
         error=error
     )
@@ -920,7 +1127,10 @@ def statistics():
 
 def predictions():
     username = current_user()
-    match = get_next_match()
+
+    live_match = get_live_match()
+    match = live_match or get_next_match()
+    is_live = live_match is not None
 
     error = None
     success = None
@@ -933,6 +1143,7 @@ def predictions():
     if not match:
         return render_template(
             "predictions.html",
+            is_live=False,
             match=None,
             locked=False,
             error=None,
@@ -944,7 +1155,7 @@ def predictions():
         )
 
     predictions_list = load_predictions()
-    locked = is_match_locked(match)
+    locked = is_live or is_match_locked(match)
 
     for prediction in predictions_list:
         if prediction["player"] == username and prediction["match_id"] == match["id"]:
@@ -1018,6 +1229,7 @@ def predictions():
 
     return render_template(
         "predictions.html",
+        is_live=is_live,
         match=match,
         locked=locked,
         error=error,
@@ -1027,7 +1239,7 @@ def predictions():
         existing_away=existing_away,
         locked_predictions=locked_predictions,
         home_logo=TEAM_LOGOS.get(match["home_team"]),
-        away_logo=TEAM_LOGOS.get(match["away_team"])
+        away_logo=TEAM_LOGOS.get(match["away_team"]),
     )
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
@@ -1127,8 +1339,8 @@ def admin_matches():
 
                         match["api_fixture_id"] = fixture["id"]
                         match["source"] = "api"
-                        match["home_team"] = teams_data["home"]["name"]
-                        match["away_team"] = teams_data["away"]["name"]
+                        sync_match_order_from_api(match, api_fixture, only_before_kickoff=True)
+                        match["match_date"] = local_datetime.strftime("%Y-%m-%d")
                         match["match_time"] = local_datetime.strftime("%H:%M")
                         match["status"] = "scheduled"
 
@@ -1177,6 +1389,8 @@ def admin_matches():
                             "source": "api",
                             "home_team": teams_data["home"]["name"],
                             "away_team": teams_data["away"]["name"],
+                            "home_team_id": teams_data["home"]["id"],
+                            "away_team_id": teams_data["away"]["id"],
                             "match_date": local_datetime.strftime("%Y-%m-%d"),
                             "match_time": local_datetime.strftime("%H:%M"),
                             "is_playoff": False,
@@ -1334,6 +1548,8 @@ def admin_matches():
                     "id": str(uuid.uuid4()),
                     "home_team": home_team,
                     "away_team": away_team,
+                    "home_team_id": None,
+                    "away_team_id": None,
                     "match_date": match_date,
                     "match_time": match_time,
                     "is_playoff": is_playoff,
@@ -1512,6 +1728,9 @@ def cron_update_match_times():
 
         local_datetime = fixture_datetime.astimezone()
 
+        order_changed = sync_match_order_from_api(
+            match, api_fixture, only_before_kickoff=True
+        )
         match["match_date"] = local_datetime.strftime("%Y-%m-%d")
         match["match_time"] = local_datetime.strftime("%H:%M")
         match["source"] = "api"
@@ -1631,6 +1850,7 @@ def auto_attach_fixture_if_needed(matches):
 
                 match["api_fixture_id"] = fixture["id"]
                 match["source"] = "api"
+                sync_match_order_from_api(match, api_fixture, only_before_kickoff=True)
                 match["match_date"] = local_datetime.strftime("%Y-%m-%d")
                 match["match_time"] = local_datetime.strftime("%H:%M")
                 match["status"] = "scheduled"
@@ -1668,6 +1888,22 @@ def auto_check_results_if_needed():
             match["match_date"] + " " + match_time,
             "%Y-%m-%d %H:%M"
         )
+
+        # Before kickoff, refresh the official home/away order as well as time.
+        # This makes the correction visible to admins and predictors even if the
+        # scheduled cron endpoint has not run yet.
+        if now < match_datetime:
+            api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
+            if api_fixture:
+                fixture = api_fixture["fixture"]
+                fixture_datetime = datetime.fromisoformat(
+                    fixture["date"].replace("Z", "+00:00")
+                ).astimezone()
+                if sync_match_order_from_api(match, api_fixture, only_before_kickoff=True):
+                    changed = True
+                match["match_date"] = fixture_datetime.strftime("%Y-%m-%d")
+                match["match_time"] = fixture_datetime.strftime("%H:%M")
+            continue
 
         if now < match_datetime + timedelta(hours=2):
             continue

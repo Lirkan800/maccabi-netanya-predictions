@@ -1122,110 +1122,216 @@ def statistics():
         exact_leader=exact_leader,
         exact_leader_count=exact_leader_count
     )
+
 @app.route("/predictions", methods=["GET", "POST"])
 @login_required
-
 def predictions():
     username = current_user()
 
     live_match = get_live_match()
-    match = live_match or get_next_match()
+    next_match = get_next_match()
+
+    # המשחק שמוצג בכרטיסיית "המשחק הקרוב"
+    match = live_match or next_match
     is_live = live_match is not None
 
     error = None
     success = None
-
-    existing_prediction = None
-    existing_home = ""
-    existing_away = ""
-    locked_predictions = []
-
-    if not match:
-        return render_template(
-            "predictions.html",
-            is_live=False,
-            match=None,
-            locked=False,
-            error=None,
-            success=None,
-            existing_prediction=None,
-            existing_home="",
-            existing_away="",
-            locked_predictions=[]
-        )
+    active_tab = "current"
 
     predictions_list = load_predictions()
-    locked = is_live or is_match_locked(match)
+    matches_list = load_matches()
 
-    for prediction in predictions_list:
-        if prediction["player"] == username and prediction["match_id"] == match["id"]:
-            existing_prediction = prediction
-            existing_home = prediction["guess_home"]
-            existing_away = prediction["guess_away"]
-            break
-
+    # ---------------------------------------------------------
+    # שמירת ניחוש - עובד עכשיו עבור כל משחק לפי match_id
+    # ---------------------------------------------------------
     if request.method == "POST":
-        if locked:
+        posted_match_id = request.form.get("match_id", "").strip()
+        active_tab = request.form.get("source_tab", "current")
+
+        posted_match = None
+
+        for item in matches_list:
+            if item.get("id") == posted_match_id:
+                posted_match = item
+                break
+
+        if not posted_match:
+            error = "המשחק לא נמצא"
+
+        elif posted_match.get("status") != "scheduled":
+            error = "לא ניתן לעדכן ניחוש למשחק שהסתיים"
+
+        elif is_match_locked(posted_match):
             error = "הניחושים למשחק הזה כבר ננעלו"
+
         else:
             guess_home_raw = request.form.get("guess_home", "").strip()
             guess_away_raw = request.form.get("guess_away", "").strip()
 
             if guess_home_raw == "" or guess_away_raw == "":
                 error = "יש למלא תוצאה לשתי הקבוצות"
-            else:
-                guess_home = int(guess_home_raw)
-                guess_away = int(guess_away_raw)
 
-                if existing_prediction:
-                    existing_prediction["guess_home"] = guess_home
-                    existing_prediction["guess_away"] = guess_away
-                    success = "הניחוש עודכן בהצלחה"
-                else:
-                    predictions_list.append({
-                        "match_id": match["id"],
-                        "player": username,
-                        "guess_home": guess_home,
-                        "guess_away": guess_away,
-                        "points": 0,
-                        "bonus": 0,
-                        "exact": False,
-                        "match_finished": False
+            else:
+                try:
+                    guess_home = int(guess_home_raw)
+                    guess_away = int(guess_away_raw)
+
+                    if guess_home < 0 or guess_away < 0:
+                        error = "לא ניתן להזין תוצאה שלילית"
+
+                    else:
+                        existing = None
+
+                        for prediction in predictions_list:
+                            if (
+                                prediction["player"] == username
+                                and prediction["match_id"] == posted_match_id
+                            ):
+                                existing = prediction
+                                break
+
+                        if existing:
+                            existing["guess_home"] = guess_home
+                            existing["guess_away"] = guess_away
+                            success = "הניחוש עודכן בהצלחה"
+                        else:
+                            predictions_list.append({
+                                "match_id": posted_match_id,
+                                "player": username,
+                                "guess_home": guess_home,
+                                "guess_away": guess_away,
+                                "points": 0,
+                                "bonus": 0,
+                                "exact": False,
+                                "match_finished": False
+                            })
+
+                            success = "הניחוש נשמר בהצלחה"
+
+                        save_predictions(predictions_list)
+
+                except ValueError:
+                    error = "יש להזין מספרים תקינים"
+
+    # טוענים שוב אחרי POST כדי שהתצוגה תציג מיד את הנתונים החדשים
+    predictions_list = load_predictions()
+    matches_list = load_matches()
+
+    # ---------------------------------------------------------
+    # כל הניחושים של המשתמש לפי match_id
+    # ---------------------------------------------------------
+    user_predictions = {}
+
+    for prediction in predictions_list:
+        if prediction["player"] == username:
+            user_predictions[prediction["match_id"]] = prediction
+
+    # ---------------------------------------------------------
+    # המשחק הקרוב / משחק חי
+    # ---------------------------------------------------------
+    existing_prediction = None
+    existing_home = ""
+    existing_away = ""
+    locked_predictions = []
+    locked = False
+
+    if match:
+        locked = is_live or is_match_locked(match)
+
+        existing_prediction = user_predictions.get(match["id"])
+
+        if existing_prediction:
+            existing_home = existing_prediction["guess_home"]
+            existing_away = existing_prediction["guess_away"]
+
+        if locked:
+            for player_name in players:
+                player_prediction = None
+
+                for prediction in predictions_list:
+                    if (
+                        prediction["match_id"] == match["id"]
+                        and prediction["player"] == player_name
+                    ):
+                        player_prediction = prediction
+                        break
+
+                if player_prediction:
+                    locked_predictions.append({
+                        "player": player_name,
+                        "guessed": True,
+                        "guess_home": player_prediction["guess_home"],
+                        "guess_away": player_prediction["guess_away"]
                     })
-                    success = "הניחוש נשמר בהצלחה"
+                else:
+                    locked_predictions.append({
+                        "player": player_name,
+                        "guessed": False,
+                        "guess_home": None,
+                        "guess_away": None
+                    })
 
-                save_predictions(predictions_list)
+    # ---------------------------------------------------------
+    # כל המשחקים העתידיים, ללא המשחק הקרוב
+    # ---------------------------------------------------------
+    future_matches = []
+    now = datetime.now()
 
-                existing_home = guess_home
-                existing_away = guess_away
-                existing_prediction = True
+    current_match_id = match["id"] if match else None
 
-    if locked:
-        for player_name in players:
-            player_prediction = None
+    for future_match in matches_list:
+        if future_match.get("status") != "scheduled":
+            continue
 
-            for prediction in predictions_list:
-                if (
-                    prediction["match_id"] == match["id"]
-                    and prediction["player"] == player_name
-                ):
-                    player_prediction = prediction
-                    break
+        if future_match.get("id") == current_match_id:
+            continue
 
-            if player_prediction:
-                locked_predictions.append({
-                    "player": player_name,
-                    "guessed": True,
-                    "guess_home": player_prediction["guess_home"],
-                    "guess_away": player_prediction["guess_away"]
-                })
+        match_date = future_match.get("match_date", "")
+        match_time = future_match.get("match_time", "")
+
+        if not match_date:
+            continue
+
+        try:
+            if match_time:
+                match_datetime = datetime.strptime(
+                    f"{match_date} {match_time}",
+                    "%Y-%m-%d %H:%M"
+                )
             else:
-                locked_predictions.append({
-                    "player": player_name,
-                    "guessed": False,
-                    "guess_home": None,
-                    "guess_away": None
-                })
+                match_datetime = datetime.strptime(
+                    f"{match_date} 23:59",
+                    "%Y-%m-%d %H:%M"
+                )
+
+        except ValueError:
+            continue
+
+        if match_datetime <= now:
+            continue
+
+        date_obj = datetime.strptime(match_date, "%Y-%m-%d")
+
+        future_match["display_date"] = date_obj.strftime("%d/%m/%Y")
+        future_match["locked"] = is_match_locked(future_match)
+
+        future_match["prediction"] = user_predictions.get(
+            future_match["id"]
+        )
+
+        future_match["home_logo"] = TEAM_LOGOS.get(
+            future_match["home_team"]
+        )
+
+        future_match["away_logo"] = TEAM_LOGOS.get(
+            future_match["away_team"]
+        )
+
+        future_matches.append((match_datetime, future_match))
+
+    future_matches.sort(key=lambda item: item[0])
+    future_matches = [item[1] for item in future_matches]
 
     return render_template(
         "predictions.html",
@@ -1234,13 +1340,19 @@ def predictions():
         locked=locked,
         error=error,
         success=success,
+        active_tab=active_tab,
+
         existing_prediction=existing_prediction,
         existing_home=existing_home,
         existing_away=existing_away,
         locked_predictions=locked_predictions,
-        home_logo=TEAM_LOGOS.get(match["home_team"]),
-        away_logo=TEAM_LOGOS.get(match["away_team"]),
+
+        future_matches=future_matches,
+
+        home_logo=TEAM_LOGOS.get(match["home_team"]) if match else None,
+        away_logo=TEAM_LOGOS.get(match["away_team"]) if match else None
     )
+
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
     error = None
