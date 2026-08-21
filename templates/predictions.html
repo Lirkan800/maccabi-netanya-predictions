@@ -121,10 +121,7 @@
     font-weight: bold;
 }
 
-
-/* =========================
-   טאבים
-========================= */
+/* טאבים */
 
 .prediction-tabs {
     display: flex;
@@ -160,10 +157,7 @@
     display: block;
 }
 
-
-/* =========================
-   Accordion משחקים עתידיים
-========================= */
+/* Accordion */
 
 .future-summary {
     text-align: center;
@@ -233,9 +227,8 @@
 
 .future-arrow {
     font-size: 18px;
-    text-align: center;
-
     transition: transform 0.4s ease;
+    text-align: center;
 }
 
 .future-row.open .future-arrow {
@@ -246,10 +239,8 @@
     max-height: 0;
     opacity: 0;
     overflow: hidden;
-
     padding: 0 18px;
     border-top: 1px solid transparent;
-
     transform: translateY(-8px);
 
     transition:
@@ -263,10 +254,8 @@
 .future-row.open .future-row-body {
     max-height: 500px;
     opacity: 1;
-
     padding: 0 18px 18px;
     border-top-color: rgba(255,212,0,0.12);
-
     transform: translateY(0);
 }
 
@@ -347,10 +336,27 @@
     color: #ffd400;
 }
 
+.save-feedback {
+    display: none;
+    text-align: center;
+    margin-top: 12px;
+    font-weight: bold;
+}
 
-/* =========================
-   MOBILE
-========================= */
+.save-feedback.success {
+    display: block;
+    color: #7CFF8A;
+}
+
+.save-feedback.error {
+    display: block;
+    color: #ff8a8a;
+}
+
+button.saving {
+    opacity: 0.65;
+    pointer-events: none;
+}
 
 @media (max-width: 768px) {
     .match-box {
@@ -462,6 +468,11 @@
     }
 
     .future-row-body {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .future-row.open .future-row-body {
         padding: 0 10px 14px;
     }
 
@@ -503,8 +514,6 @@
 
 <div class="card">
 
-    <!-- טאבים -->
-
     <div class="prediction-tabs">
 
         <button
@@ -529,43 +538,6 @@
     </div>
 
 
-    <!-- הודעות -->
-
-    {% if error %}
-        <div style="
-            background: rgba(255,107,107,0.12);
-            border: 1px solid rgba(255,107,107,0.45);
-            color: #ff8a8a;
-            padding: 14px 18px;
-            border-radius: 14px;
-            font-weight: bold;
-            text-align: center;
-            margin-bottom: 18px;
-        ">
-            ⚠️ {{ error }}
-        </div>
-    {% endif %}
-
-    {% if success %}
-        <div style="
-            background: rgba(76,175,80,0.12);
-            border: 1px solid rgba(76,175,80,0.45);
-            color: #7CFF8A;
-            padding: 14px 18px;
-            border-radius: 14px;
-            font-weight: bold;
-            text-align: center;
-            margin-bottom: 18px;
-        ">
-            ✅ {{ success }}
-        </div>
-    {% endif %}
-
-
-    <!-- =============================================
-         המשחק הקרוב
-    ============================================== -->
-
     <div
         id="currentTab"
         class="tab-content {% if active_tab != 'future' %}active{% endif %}"
@@ -580,7 +552,6 @@
         {% else %}
             <h2 style="text-align:center;">⚽ המשחק הקרוב</h2>
         {% endif %}
-
 
         {% if match %}
 
@@ -603,7 +574,6 @@
                 <div class="teams-row">
 
                     <div class="team-box">
-
                         <div class="team-label home-label">בית</div>
 
                         {% if home_logo %}
@@ -613,18 +583,12 @@
                             >
                         {% endif %}
 
-                        <h1 class="team-name">
-                            {{ match.home_team }}
-                        </h1>
-
+                        <h1 class="team-name">{{ match.home_team }}</h1>
                     </div>
-
 
                     <div class="vs-text">VS</div>
 
-
                     <div class="team-box">
-
                         <div class="team-label away-label">חוץ</div>
 
                         {% if away_logo %}
@@ -634,18 +598,13 @@
                             >
                         {% endif %}
 
-                        <h1 class="team-name">
-                            {{ match.away_team }}
-                        </h1>
-
+                        <h1 class="team-name">{{ match.away_team }}</h1>
                     </div>
 
                 </div>
 
-
                 <p class="match-date">
-                    📅
-                    {{ match.match_date.split('-')[2] }}/{{ match.match_date.split('-')[1] }}/{{ match.match_date.split('-')[0] }}
+                    📅 {{ match.match_date.split('-')[2] }}/{{ match.match_date.split('-')[1] }}/{{ match.match_date.split('-')[0] }}
                 </p>
 
                 {% if match.match_time %}
@@ -656,9 +615,7 @@
 
             </div>
 
-
             <br>
-
 
             {% if locked %}
 
@@ -674,9 +631,7 @@
                         </p>
                     {% endif %}
 
-
                     <h3>👀 ניחושי המשתתפים</h3>
-
 
                     {% if locked_predictions %}
 
@@ -698,9 +653,7 @@
                                             {{ prediction.guess_away }}
                                             {{ match.away_team }}
                                         {% else %}
-                                            <span class="no-guess">
-                                                לא ניחש
-                                            </span>
+                                            <span class="no-guess">לא ניחש</span>
                                         {% endif %}
                                     </td>
                                 </tr>
@@ -708,13 +661,10 @@
                         </table>
 
                     {% else %}
-
                         <p>עדיין אין משתתפים להצגה.</p>
-
                     {% endif %}
 
                 </div>
-
 
             {% else %}
 
@@ -722,21 +672,17 @@
 
                     <h2>🎯 הניחוש שלך</h2>
 
-
-                    <form method="POST">
+                    <form
+                        method="POST"
+                        class="ajax-prediction-form"
+                        data-context="current"
+                    >
 
                         <input
                             type="hidden"
                             name="match_id"
                             value="{{ match.id }}"
                         >
-
-                        <input
-                            type="hidden"
-                            name="source_tab"
-                            value="current"
-                        >
-
 
                         <div class="guess-box">
 
@@ -766,21 +712,19 @@
 
                         </div>
 
-
                         <br><br>
 
-
                         <div style="text-align:center;">
-
-                            <button type="submit">
+                            <button type="submit" class="save-button">
                                 {% if existing_prediction %}
                                     💾 עדכן את הניחוש שלי
                                 {% else %}
                                     💾 שמור את הניחוש שלי
                                 {% endif %}
                             </button>
-
                         </div>
+
+                        <div class="save-feedback"></div>
 
                     </form>
 
@@ -790,28 +734,38 @@
 
 
             {% if existing_prediction %}
-
-                <div class="card">
+                <div class="card current-existing-prediction">
 
                     <h3>✅ הניחוש הנוכחי שלך</h3>
 
                     <p>
                         {{ match.home_team }}
-                        {{ existing_home }}
+                        <span class="current-home-value">{{ existing_home }}</span>
                         -
-                        {{ existing_away }}
+                        <span class="current-away-value">{{ existing_away }}</span>
                         {{ match.away_team }}
                     </p>
 
                 </div>
+            {% else %}
+                <div class="card current-existing-prediction" style="display:none;">
 
+                    <h3>✅ הניחוש הנוכחי שלך</h3>
+
+                    <p>
+                        {{ match.home_team }}
+                        <span class="current-home-value"></span>
+                        -
+                        <span class="current-away-value"></span>
+                        {{ match.away_team }}
+                    </p>
+
+                </div>
             {% endif %}
-
 
         {% else %}
 
             <div style="text-align:center; padding:30px 10px;">
-
                 <h3>אין כרגע משחק קרוב.</h3>
 
                 <p>
@@ -819,17 +773,12 @@
                     <strong>משחקים עתידיים</strong>
                     ולהכניס ניחושים מראש.
                 </p>
-
             </div>
 
         {% endif %}
 
     </div>
 
-
-    <!-- =============================================
-         משחקים עתידיים
-    ============================================== -->
 
     <div
         id="futureTab"
@@ -856,7 +805,11 @@
             {% endfor %}
 
             <div class="future-counter">
-                ניחשת {{ guessed_count.value }} מתוך {{ future_matches|length }} משחקים
+                ניחשת
+                <span id="futureGuessedCount">{{ guessed_count.value }}</span>
+                מתוך
+                {{ future_matches|length }}
+                משחקים
             </div>
 
 
@@ -867,6 +820,8 @@
                     <div
                         class="future-row"
                         id="futureRow{{ loop.index }}"
+                        data-match-id="{{ future_match.id }}"
+                        data-has-prediction="{% if future_match.prediction %}1{% else %}0{% endif %}"
                     >
 
                         <button
@@ -884,15 +839,11 @@
                                 {% endif %}
                             </div>
 
-
                             <div class="future-teams-compact">
-
                                 {{ future_match.home_team }}
                                 -
                                 {{ future_match.away_team }}
-
                             </div>
-
 
                             <div class="future-status">
 
@@ -904,7 +855,7 @@
 
                                 {% elif future_match.prediction %}
 
-                                    <span class="status-guessed">
+                                    <span class="status-guessed future-status-value">
                                         ✅
                                         {{ future_match.prediction.guess_home }}
                                         -
@@ -913,7 +864,7 @@
 
                                 {% else %}
 
-                                    <span class="status-missing">
+                                    <span class="status-missing future-status-value">
                                         ⚠️ טרם ניחשת
                                     </span>
 
@@ -921,24 +872,17 @@
 
                             </div>
 
-
-                            <div class="future-arrow">
-                                ▼
-                            </div>
+                            <div class="future-arrow">▼</div>
 
                         </button>
 
 
                         <div class="future-row-body">
 
-
                             <div class="future-detail-teams">
 
                                 <div class="future-detail-team">
-
-                                    <div class="team-label home-label">
-                                        בית
-                                    </div>
+                                    <div class="team-label home-label">בית</div>
 
                                     {% if future_match.home_logo %}
                                         <img
@@ -950,20 +894,12 @@
                                     <div class="future-detail-name">
                                         {{ future_match.home_team }}
                                     </div>
-
                                 </div>
 
-
-                                <div class="future-detail-vs">
-                                    VS
-                                </div>
-
+                                <div class="future-detail-vs">VS</div>
 
                                 <div class="future-detail-team">
-
-                                    <div class="team-label away-label">
-                                        חוץ
-                                    </div>
+                                    <div class="team-label away-label">חוץ</div>
 
                                     {% if future_match.away_logo %}
                                         <img
@@ -975,7 +911,6 @@
                                     <div class="future-detail-name">
                                         {{ future_match.away_team }}
                                     </div>
-
                                 </div>
 
                             </div>
@@ -988,9 +923,7 @@
                                     🔒 הניחושים למשחק הזה כבר ננעלו.
 
                                     {% if future_match.prediction %}
-
                                         <div style="margin-top:8px; color:#fff;">
-
                                             הניחוש שלך:
 
                                             <strong>
@@ -998,17 +931,18 @@
                                                 -
                                                 {{ future_match.prediction.guess_away }}
                                             </strong>
-
                                         </div>
-
                                     {% endif %}
 
                                 </div>
 
-
                             {% else %}
 
-                                <form method="POST">
+                                <form
+                                    method="POST"
+                                    class="ajax-prediction-form"
+                                    data-context="future"
+                                >
 
                                     <input
                                         type="hidden"
@@ -1016,19 +950,9 @@
                                         value="{{ future_match.id }}"
                                     >
 
-                                    <input
-                                        type="hidden"
-                                        name="source_tab"
-                                        value="future"
-                                    >
-
-
                                     <div class="future-guess-box">
 
-                                        <span>
-                                            {{ future_match.home_team }}
-                                        </span>
-
+                                        <span>{{ future_match.home_team }}</span>
 
                                         <input
                                             type="number"
@@ -1039,11 +963,7 @@
                                             required
                                         >
 
-
-                                        <strong style="color:#ffd400;">
-                                            -
-                                        </strong>
-
+                                        <strong style="color:#ffd400;">-</strong>
 
                                         <input
                                             type="number"
@@ -1054,17 +974,13 @@
                                             required
                                         >
 
-
-                                        <span>
-                                            {{ future_match.away_team }}
-                                        </span>
+                                        <span>{{ future_match.away_team }}</span>
 
                                     </div>
 
-
                                     <button
                                         type="submit"
-                                        class="future-save-button"
+                                        class="future-save-button save-button"
                                     >
                                         {% if future_match.prediction %}
                                             💾 עדכן ניחוש
@@ -1073,19 +989,9 @@
                                         {% endif %}
                                     </button>
 
+                                    <div class="save-feedback"></div>
+
                                 </form>
-
-
-                                {% if future_match.prediction %}
-
-                                    <div class="saved-prediction">
-                                        ✅ הניחוש שלך:
-                                        {{ future_match.prediction.guess_home }}
-                                        -
-                                        {{ future_match.prediction.guess_away }}
-                                    </div>
-
-                                {% endif %}
 
                             {% endif %}
 
@@ -1097,20 +1003,15 @@
 
             </div>
 
-
         {% else %}
 
             <div style="text-align:center; padding:30px 10px;">
-
-                <h3>
-                    📅 אין כרגע משחקים עתידיים נוספים
-                </h3>
+                <h3>📅 אין כרגע משחקים עתידיים נוספים</h3>
 
                 <p>
                     כאשר האדמין יוסיף משחקים חדשים,
                     הם יופיעו כאן אוטומטית.
                 </p>
-
             </div>
 
         {% endif %}
@@ -1121,57 +1022,170 @@
 
 
 <script>
-
 function openPredictionTab(tabName) {
-
     const currentTab = document.getElementById("currentTab");
     const futureTab = document.getElementById("futureTab");
 
     const currentButton = document.getElementById("currentTabButton");
     const futureButton = document.getElementById("futureTabButton");
 
-
     if (tabName === "future") {
-
         currentTab.classList.remove("active");
         futureTab.classList.add("active");
 
         currentButton.classList.remove("active");
         futureButton.classList.add("active");
-
     } else {
-
         futureTab.classList.remove("active");
         currentTab.classList.add("active");
 
         futureButton.classList.remove("active");
         currentButton.classList.add("active");
-
     }
-
 }
 
 
 function toggleFutureMatch(rowId) {
-
     const selectedRow = document.getElementById(rowId);
-
     const allRows = document.querySelectorAll(".future-row");
 
-
     allRows.forEach(function(row) {
-
         if (row.id !== rowId) {
             row.classList.remove("open");
         }
-
     });
 
-
     selectedRow.classList.toggle("open");
-
 }
 
+
+async function savePredictionAjax(form) {
+    const button = form.querySelector(".save-button");
+    const feedback = form.querySelector(".save-feedback");
+
+    const matchId = form.querySelector('[name="match_id"]').value;
+    const guessHome = form.querySelector('[name="guess_home"]').value;
+    const guessAway = form.querySelector('[name="guess_away"]').value;
+
+    const originalButtonText = button.textContent;
+
+    feedback.className = "save-feedback";
+    feedback.textContent = "";
+
+    button.classList.add("saving");
+    button.textContent = "⏳ שומר...";
+
+    try {
+        const response = await fetch("/api/save-prediction", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                match_id: matchId,
+                guess_home: guessHome,
+                guess_away: guessAway
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "שמירת הניחוש נכשלה");
+        }
+
+        feedback.className = "save-feedback success";
+        feedback.textContent = "✅ " + data.message;
+
+        button.textContent = "💾 עדכן ניחוש";
+
+        const context = form.dataset.context;
+
+        if (context === "current") {
+            const existingBox = document.querySelector(
+                ".current-existing-prediction"
+            );
+
+            const homeValue = document.querySelector(
+                ".current-home-value"
+            );
+
+            const awayValue = document.querySelector(
+                ".current-away-value"
+            );
+
+            if (homeValue) {
+                homeValue.textContent = data.guess_home;
+            }
+
+            if (awayValue) {
+                awayValue.textContent = data.guess_away;
+            }
+
+            if (existingBox) {
+                existingBox.style.display = "";
+            }
+
+            button.textContent = "💾 עדכן את הניחוש שלי";
+        }
+
+        if (context === "future") {
+            const row = form.closest(".future-row");
+
+            if (row) {
+                const statusElement = row.querySelector(
+                    ".future-status-value"
+                );
+
+                if (statusElement) {
+                    statusElement.className =
+                        "status-guessed future-status-value";
+
+                    statusElement.textContent =
+                        "✅ " +
+                        data.guess_home +
+                        " - " +
+                        data.guess_away;
+                }
+
+                if (row.dataset.hasPrediction !== "1") {
+                    row.dataset.hasPrediction = "1";
+
+                    const counter = document.getElementById(
+                        "futureGuessedCount"
+                    );
+
+                    if (counter) {
+                        counter.textContent =
+                            parseInt(counter.textContent || "0", 10) + 1;
+                    }
+                }
+            }
+        }
+
+        setTimeout(function() {
+            feedback.className = "save-feedback";
+            feedback.textContent = "";
+        }, 3000);
+
+    } catch (error) {
+        feedback.className = "save-feedback error";
+        feedback.textContent = "⚠️ " + error.message;
+
+        button.textContent = originalButtonText;
+
+    } finally {
+        button.classList.remove("saving");
+    }
+}
+
+
+document.querySelectorAll(".ajax-prediction-form").forEach(function(form) {
+    form.addEventListener("submit", function(event) {
+        event.preventDefault();
+        savePredictionAjax(form);
+    });
+});
 </script>
 
 {% endblock %}

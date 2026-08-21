@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from functools import wraps
 from datetime import datetime, timedelta
 import os
@@ -1352,6 +1352,119 @@ def predictions():
         home_logo=TEAM_LOGOS.get(match["home_team"]) if match else None,
         away_logo=TEAM_LOGOS.get(match["away_team"]) if match else None
     )
+
+@app.route("/api/save-prediction", methods=["POST"])
+@login_required
+def save_prediction_api():
+    username = current_user()
+
+    data = request.get_json(silent=True) or {}
+
+    match_id = str(data.get("match_id", "")).strip()
+    guess_home_raw = data.get("guess_home")
+    guess_away_raw = data.get("guess_away")
+
+    # בדיקה שכל הנתונים הגיעו
+    if not match_id:
+        return jsonify({
+            "success": False,
+            "message": "המשחק לא נמצא"
+        }), 400
+
+    if guess_home_raw is None or guess_away_raw is None:
+        return jsonify({
+            "success": False,
+            "message": "יש למלא תוצאה לשתי הקבוצות"
+        }), 400
+
+    # בדיקת תוצאה
+    try:
+        guess_home = int(guess_home_raw)
+        guess_away = int(guess_away_raw)
+
+        if guess_home < 0 or guess_away < 0:
+            raise ValueError
+
+    except (ValueError, TypeError):
+        return jsonify({
+            "success": False,
+            "message": "יש להזין תוצאה תקינה"
+        }), 400
+
+    # חיפוש המשחק
+    matches_list = load_matches()
+
+    match = None
+
+    for item in matches_list:
+        if str(item.get("id")) == match_id:
+            match = item
+            break
+
+    if not match:
+        return jsonify({
+            "success": False,
+            "message": "המשחק לא נמצא"
+        }), 404
+
+    # אסור לנחש משחק שכבר הסתיים
+    if match.get("status") != "scheduled":
+        return jsonify({
+            "success": False,
+            "message": "לא ניתן לעדכן ניחוש למשחק שהסתיים"
+        }), 400
+
+    # בדיקת נעילה
+    if is_match_locked(match):
+        return jsonify({
+            "success": False,
+            "message": "הניחושים למשחק הזה כבר ננעלו"
+        }), 400
+
+    # טעינת הניחושים
+    predictions_list = load_predictions()
+
+    existing = None
+
+    for prediction in predictions_list:
+        if (
+            str(prediction.get("player")) == str(username)
+            and str(prediction.get("match_id")) == match_id
+        ):
+            existing = prediction
+            break
+
+    # עדכון ניחוש קיים
+    if existing:
+        existing["guess_home"] = guess_home
+        existing["guess_away"] = guess_away
+
+        message = "הניחוש עודכן בהצלחה"
+
+    # יצירת ניחוש חדש
+    else:
+        predictions_list.append({
+            "match_id": match_id,
+            "player": username,
+            "guess_home": guess_home,
+            "guess_away": guess_away,
+            "points": 0,
+            "bonus": 0,
+            "exact": False,
+            "match_finished": False
+        })
+
+        message = "הניחוש נשמר בהצלחה"
+
+    save_predictions(predictions_list)
+
+    return jsonify({
+        "success": True,
+        "message": message,
+        "match_id": match_id,
+        "guess_home": guess_home,
+        "guess_away": guess_away
+    })
 
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
