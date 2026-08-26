@@ -1571,18 +1571,20 @@ def admin():
             password = request.form.get("admin_password", "")
             if password == ADMIN_PASSWORD:
                 session["is_admin"] = True
+
+                # API synchronization is triggered ONLY after a successful
+                # admin password login. Normal admin page loads, refreshes and
+                # navigation between admin pages never call API-Football.
+                # The persistent 20-minute cooldown still protects against
+                # repeated logout/login cycles.
+                run_admin_api_sync_if_due()
+
                 return redirect(url_for("admin"))
             error = "סיסמת מנהל שגויה"
 
         elif action == "logout":
             session["is_admin"] = False
             return redirect(url_for("leaderboard"))
-
-    # Only an authenticated admin may trigger API synchronization.
-    # A persistent 20-minute cooldown prevents refreshes/navigation from
-    # consuming the API quota repeatedly.
-    if is_admin():
-        run_admin_api_sync_if_due()
 
     total_players = len(players)
 
@@ -1616,8 +1618,6 @@ def admin():
 def admin_matches():
     if not is_admin():
         return redirect(url_for("admin"))
-
-    run_admin_api_sync_if_due()
 
     error = None
     success = None
@@ -2177,7 +2177,7 @@ def admin_api_sync():
     Perform one controlled API synchronization cycle.
 
     Rules:
-    - Called only from authenticated admin pages.
+    - Called only immediately after a successful admin password login.
     - Public visitors never call API-Football.
     - Before kickoff: refresh official home/away and kickoff time.
     - During the match: no live-score polling.
@@ -2281,7 +2281,7 @@ def admin_api_sync():
 def run_admin_api_sync_if_due():
     """
     Run API synchronization at most once every 20 minutes across all Render
-    instances/restarts. The timestamp is stored in PostgreSQL/SQLite app_state,
+    instances/restarts. This function is invoked only after successful admin login. The timestamp is stored in PostgreSQL/SQLite app_state,
     not in Flask memory.
     """
     state_key = "admin_api_last_sync"
@@ -2310,9 +2310,9 @@ def run_admin_api_sync_if_due():
     return True
 
 
-# Kept for compatibility with older code paths, but public pages no longer call it.
+# Kept for compatibility with older code paths. It intentionally performs no API call.
 def auto_check_results_if_needed():
-    return run_admin_api_sync_if_due() if is_admin() else False
+    return False
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
