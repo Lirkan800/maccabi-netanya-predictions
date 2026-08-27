@@ -1,166 +1,137 @@
 {% extends "admin_base.html" %}
 
+{% block title %}ניהול משחקים{% endblock %}
 
-{% block title %}
-ניהול משחקים
+{% block admin_head %}
+<style>
+.matches-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.matches-tools .tool-box { background:#181818; border:1px solid rgba(255,255,255,.07); border-radius:14px; padding:14px; }
+.matches-tools input, .matches-tools select { width:100%; }
+.create-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.matches-mobile { display:none; }
+.match-mobile-card { background:#181818; border:1px solid rgba(255,212,0,.14); border-radius:15px; padding:13px; margin-bottom:10px; }
+.match-mobile-title { font-weight:800; font-size:16px; margin-bottom:6px; }
+.match-mobile-meta { color:#aaa; font-size:12px; line-height:1.7; }
+.match-mobile-actions { margin-top:12px; display:grid; gap:8px; }
+.score-inline { display:flex; gap:6px; align-items:center; }
+.score-inline input { width:70px; }
+.table-wrap { overflow-x:auto; }
+@media (max-width: 760px) {
+    .matches-tools { grid-template-columns:1fr; }
+    .create-grid { grid-template-columns:1fr; }
+    .matches-desktop { display:none; }
+    .matches-mobile { display:block; }
+    .tool-box button, .match-mobile-actions button { width:100%; }
+}
+</style>
 {% endblock %}
 
 {% block content %}
-
 <div class="card">
     <h2>⚽ ניהול משחקים</h2>
-    <h3>🌍 ייבוא משחק מה-API</h3>
 
-<form method="POST">
-    <p>Fixture ID</p>
-    <input type="text" name="api_fixture_id" placeholder="לדוגמה: 1489385">
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% if success %}<p class="success">{{ success }}</p>{% endif %}
 
-    <br><br>
+    <div class="matches-tools">
+        <div class="tool-box">
+            <h3>🌍 API</h3>
+            <form method="POST">
+                <label>Fixture ID</label>
+                <input type="text" name="api_fixture_id" placeholder="לדוגמה: 1489385">
+                <br><br>
+                <button type="submit" name="action" value="import_api_match">ייבא משחק מה-API</button>
+            </form>
+            <br>
+            <form method="POST">
+                <button type="submit" name="action" value="attach_netanya_api">חבר משחקי נתניה ל-API לפי תאריך</button>
+            </form>
+        </div>
 
-    <button type="submit" name="action" value="import_api_match">
-        ייבא משחק מה-API
-    </button>
-</form>
-<form method="POST">
-    <button type="submit" name="action" value="attach_netanya_api">
-        חבר משחקי נתניה ל-API לפי תאריך
-    </button>
-</form>
-<hr>
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
-
-    {% if success %}
-        <p class="success">{{ success }}</p>
-    {% endif %}
-
-    <h3>➕ יצירת משחק חדש</h3>
-
-    <form method="POST">
-
-        <p>קבוצת בית</p>
-        <select name="home_team">
-            {% for team in teams %}
-                <option value="{{ team }}">{{ team }}</option>
-            {% endfor %}
-        </select>
-
-        <p>קבוצת חוץ</p>
-        <select name="away_team">
-            {% for team in teams %}
-                <option value="{{ team }}">{{ team }}</option>
-            {% endfor %}
-        </select>
-
-        <p>תאריך המשחק</p>
-        <input type="date" name="match_date">
-
-        <p>שעת המשחק</p>
-        <input type="time" name="match_time">
-
-        <br><br>
-
-        <label>
-            <input type="checkbox" name="is_playoff">
-            משחק פלייאוף
-        </label>
-
-        <br><br>
-
-        <button type="submit" name="action" value="create_match">
-            צור משחק
-        </button>
-
-    </form>
+        <div class="tool-box">
+            <h3>➕ יצירת משחק חדש</h3>
+            <form method="POST">
+                <div class="create-grid">
+                    <div><label>קבוצת בית</label><select name="home_team">{% for team in teams %}<option value="{{ team }}">{{ team }}</option>{% endfor %}</select></div>
+                    <div><label>קבוצת חוץ</label><select name="away_team">{% for team in teams %}<option value="{{ team }}">{{ team }}</option>{% endfor %}</select></div>
+                    <div><label>תאריך</label><input type="date" name="match_date"></div>
+                    <div><label>שעה</label><input type="time" name="match_time"></div>
+                </div>
+                <br>
+                <label><input type="checkbox" name="is_playoff"> משחק פלייאוף</label>
+                <br><br>
+                <button type="submit" name="action" value="create_match">צור משחק</button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <div class="card">
     <h2>📋 המשחקים במערכת</h2>
 
     {% if matches %}
+    <div class="matches-desktop table-wrap">
         <table>
-            <tr>
-                <th>מס׳</th>
-                <th>בית</th>
-                <th>חוץ</th>
-                <th>תאריך</th>
-                <th>שעה</th>
-                <th>פלייאוף</th>
-                <th>תוצאה</th>
-                <th>סטטוס</th>
-                <th>חיבור API</th>
-                <th>סיום משחק</th>
-                <th>מחיקה</th>
-            </tr>
-
+            <tr><th>מס׳</th><th>בית</th><th>חוץ</th><th>תאריך</th><th>שעה</th><th>פלייאוף</th><th>תוצאה</th><th>סטטוס</th><th>API</th><th>סיום</th><th>מחיקה</th></tr>
             {% for match in matches %}
             <tr>
-                <td>{{ match.id }}</td>
-                <td>{{ match.home_team }}</td>
-                <td>{{ match.away_team }}</td>
-                <td>{{ match.match_date }}</td>
-                <td>{{ match.match_time }}</td>
+                <td>{{ match.id }}</td><td>{{ match.home_team }}</td><td>{{ match.away_team }}</td><td>{{ match.match_date }}</td><td>{{ match.match_time }}</td>
                 <td>{% if match.is_playoff %}כן{% else %}לא{% endif %}</td>
-
-                <td>
-                    {% if match.home_score is not none %}
-                        {{ match.home_score }} - {{ match.away_score }}
-                    {% else %}
-                        טרם נקבעה
-                    {% endif %}
-                </td>
-
+                <td>{% if match.home_score is not none %}{{ match.home_score }} - {{ match.away_score }}{% else %}טרם נקבעה{% endif %}</td>
                 <td>{{ match.status }}</td>
+                <td>{% if match.api_fixture_id %}<span class="success">✅ מחובר</span><br><small>{{ match.api_fixture_id }}</small>{% else %}<span class="error">❌ לא מחובר</span>{% endif %}</td>
                 <td>
-                    {% if match.api_fixture_id %}
-                        <span class="success">✅ מחובר</span><br>
-                        <small>Fixture ID: {{ match.api_fixture_id }}</small>
+                    {% if match.status == "finished" %}חושב
+                    {% elif match.api_fixture_id %}
+                    <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><button type="submit" name="action" value="check_api_result">בדוק API</button></form>
                     {% else %}
-                        <span class="error">❌ לא מחובר</span>
+                    <form method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><input type="number" name="actual_home" min="0" value="0" style="width:65px"> - <input type="number" name="actual_away" min="0" value="0" style="width:65px"><br><br><button type="submit" name="action" value="finish_match">סיים ידנית</button></form>
                     {% endif %}
                 </td>
-               <td>
-    {% if match.status == "finished" %}
-        חושב
-    {% elif match.api_fixture_id %}
-        <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');">
-            <input type="hidden" name="match_id" value="{{ match.id }}">
-            <button type="submit" name="action" value="check_api_result">
-                בדוק API וחשב ניקוד
-            </button>
-        </form>
-    {% else %}
-        <form method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');">
-            <input type="hidden" name="match_id" value="{{ match.id }}">
-
-            <input type="number" name="actual_home" min="0" value="0" style="width:70px;">
-            -
-            <input type="number" name="actual_away" min="0" value="0" style="width:70px;">
-
-            <br><br>
-
-            <button type="submit" name="action" value="finish_match">
-                סיים ידנית וחשב ניקוד
-            </button>
-        </form>
-    {% endif %}
-</td>
-
-                <td>
-                    <form method="POST" onsubmit="return confirm('בטוח למחוק את המשחק הזה?');">
-                        <input type="hidden" name="match_id" value="{{ match.id }}">
-                        <button class="danger" type="submit" name="action" value="delete_match">
-                            מחק
-                        </button>
-                    </form>
-                </td>
+                <td><form method="POST" onsubmit="return confirm('בטוח למחוק את המשחק הזה?');"><input type="hidden" name="match_id" value="{{ match.id }}"><button class="danger" type="submit" name="action" value="delete_match">מחק</button></form></td>
             </tr>
             {% endfor %}
         </table>
+    </div>
+
+    <div class="matches-mobile">
+        {% for match in matches %}
+        <div class="match-mobile-card">
+            <div class="match-mobile-title">{{ match.home_team }} - {{ match.away_team }}</div>
+            <div class="match-mobile-meta">
+                📅 {{ match.match_date }} · ⏰ {{ match.match_time }}<br>
+                {% if match.is_playoff %}🔥 פלייאוף · {% endif %}סטטוס: {{ match.status }}<br>
+                תוצאה: {% if match.home_score is not none %}{{ match.home_score }} - {{ match.away_score }}{% else %}טרם נקבעה{% endif %}<br>
+                API: {% if match.api_fixture_id %}<span class="success">✅ מחובר ({{ match.api_fixture_id }})</span>{% else %}<span class="error">❌ לא מחובר</span>{% endif %}
+            </div>
+
+            <div class="match-mobile-actions">
+                {% if match.status == "finished" %}
+                    <div class="success">✅ המשחק כבר חושב</div>
+                {% elif match.api_fixture_id %}
+                    <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');">
+                        <input type="hidden" name="match_id" value="{{ match.id }}">
+                        <button type="submit" name="action" value="check_api_result">בדוק API וחשב ניקוד</button>
+                    </form>
+                {% else %}
+                    <form method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');">
+                        <input type="hidden" name="match_id" value="{{ match.id }}">
+                        <div class="score-inline"><input type="number" name="actual_home" min="0" value="0"><span>-</span><input type="number" name="actual_away" min="0" value="0"></div>
+                        <br>
+                        <button type="submit" name="action" value="finish_match">סיים ידנית וחשב ניקוד</button>
+                    </form>
+                {% endif %}
+
+                <form method="POST" onsubmit="return confirm('בטוח למחוק את המשחק הזה?');">
+                    <input type="hidden" name="match_id" value="{{ match.id }}">
+                    <button class="danger" type="submit" name="action" value="delete_match">מחק משחק</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
     {% else %}
-        <p>עדיין אין משחקים במערכת.</p>
+    <p>עדיין אין משחקים במערכת.</p>
     {% endif %}
 </div>
-
 {% endblock %}

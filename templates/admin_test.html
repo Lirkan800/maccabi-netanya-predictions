@@ -2,102 +2,79 @@
 
 {% block title %}Test Mode{% endblock %}
 
+{% block admin_head %}
+<style>
+.test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.test-field { display: flex; flex-direction: column; gap: 6px; }
+.score-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.test-grid select, .test-grid input { width: 100%; }
+@media (max-width: 650px) {
+    .test-grid { grid-template-columns: 1fr; gap: 10px; }
+    .score-row { grid-template-columns: 1fr 1fr; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-
 <div class="card">
-
     <h2>🧪 Test Mode</h2>
 
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
-
-    {% if result_text %}
-        <p class="success">{{ result_text }}</p>
-    {% endif %}
-
-    {% if points_text %}
-        <p class="success">{{ points_text }}</p>
-    {% endif %}
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% if result_text %}<p class="success">{{ result_text }}</p>{% endif %}
+    {% if points_text %}<p class="success">{{ points_text }}</p>{% endif %}
 
     <form method="POST">
+        <div class="test-grid">
+            <div class="test-field">
+                <label>משתתף</label>
+                <select name="player">
+                    {% for player in players %}
+                    <option value="{{ player }}" {% if player == selected_player %}selected{% endif %}>{{ player }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <p>משתתף</p>
-        <select name="player">
-            {% for player in players %}
-                <option value="{{ player }}"
-                    {% if player == selected_player %}selected{% endif %}>
-                    {{ player }}
-                </option>
-            {% endfor %}
-        </select>
+            <div></div>
 
-        <p>קבוצת בית</p>
-        <select name="home_team">
-            {% for team in teams %}
-                <option value="{{ team }}"
-                    {% if team == selected_home %}selected{% endif %}>
-                    {{ team }}
-                </option>
-            {% endfor %}
-        </select>
+            <div class="test-field">
+                <label>קבוצת בית</label>
+                <select name="home_team">
+                    {% for team in teams %}
+                    <option value="{{ team }}" {% if team == selected_home %}selected{% endif %}>{{ team }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <p>קבוצת חוץ</p>
-        <select name="away_team">
-            {% for team in teams %}
-                <option value="{{ team }}"
-                    {% if team == selected_away %}selected{% endif %}>
-                    {{ team }}
-                </option>
-            {% endfor %}
-        </select>
+            <div class="test-field">
+                <label>קבוצת חוץ</label>
+                <select name="away_team">
+                    {% for team in teams %}
+                    <option value="{{ team }}" {% if team == selected_away %}selected{% endif %}>{{ team }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <p>תוצאה אמיתית</p>
+            <div class="test-field">
+                <label>תוצאה אמיתית</label>
+                <div class="score-row">
+                    <input type="number" name="actual_home" value="{{ actual_home }}" min="0">
+                    <input type="number" name="actual_away" value="{{ actual_away }}" min="0">
+                </div>
+            </div>
 
-        <input
-            type="number"
-            name="actual_home"
-            value="{{ actual_home }}"
-            min="0">
+            <div class="test-field">
+                <label>ניחוש המשתתף</label>
+                <div class="score-row">
+                    <input type="number" name="guess_home" value="{{ guess_home }}" min="0">
+                    <input type="number" name="guess_away" value="{{ guess_away }}" min="0">
+                </div>
+            </div>
+        </div>
 
-        <input
-            type="number"
-            name="actual_away"
-            value="{{ actual_away }}"
-            min="0">
-
-        <p>ניחוש המשתתף</p>
-
-        <input
-            type="number"
-            name="guess_home"
-            value="{{ guess_home }}"
-            min="0">
-
-        <input
-            type="number"
-            name="guess_away"
-            value="{{ guess_away }}"
-            min="0">
-
+        <br>
+        <label><input type="checkbox" name="is_playoff" {% if is_playoff %}checked{% endif %}> משחק פלייאוף</label>
         <br><br>
-
-        <label>
-            <input
-                type="checkbox"
-                name="is_playoff"
-                {% if is_playoff %}checked{% endif %}>
-            משחק פלייאוף
-        </label>
-
-        <br><br>
-
-        <button type="submit">
-            חשב ניקוד
-        </button>
-
+        <button type="submit">חשב ניקוד</button>
     </form>
-
 </div>
-
 {% endblock %}

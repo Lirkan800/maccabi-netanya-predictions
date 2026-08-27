@@ -6,31 +6,24 @@
     <title>{% block title %}Admin{% endblock %}</title>
 
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
             min-height: 100vh;
             background: #0f0f0f;
             color: #f3f3f3;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: Arial, "Segoe UI", sans-serif;
         }
 
-        a {
-            color: inherit;
-        }
-
-        .admin-layout {
-            min-height: 100vh;
-        }
+        a { color: inherit; }
+        .admin-layout { min-height: 100vh; }
 
         .admin-topbar {
             position: sticky;
             top: 0;
             z-index: 1000;
-            background: rgba(15, 15, 15, 0.97);
+            background: rgba(15, 15, 15, 0.98);
             border-bottom: 1px solid rgba(255, 212, 0, 0.18);
             backdrop-filter: blur(10px);
         }
@@ -38,11 +31,11 @@
         .admin-topbar-inner {
             max-width: 1180px;
             margin: 0 auto;
-            padding: 12px 18px;
-            display: flex;
+            padding: 11px 16px;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
             align-items: center;
-            justify-content: space-between;
-            gap: 16px;
+            gap: 14px;
         }
 
         .admin-brand {
@@ -60,7 +53,7 @@
             place-items: center;
             background: #ffd400;
             color: #111;
-            font-size: 19px;
+            font-size: 18px;
             font-weight: 900;
         }
 
@@ -81,69 +74,82 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 7px;
-            flex-wrap: wrap;
+            gap: 5px;
         }
 
         .admin-nav-link {
             text-decoration: none;
-            padding: 9px 12px;
-            border-radius: 12px;
-            border: 1px solid transparent;
+            padding: 9px 10px;
+            border-radius: 11px;
             color: #ccc;
-            font-size: 13px;
-            font-weight: bold;
+            font-size: 12px;
+            font-weight: 700;
             transition: 0.18s ease;
+            white-space: nowrap;
         }
 
         .admin-nav-link:hover {
             color: #ffd400;
             background: rgba(255, 212, 0, 0.07);
-            border-color: rgba(255, 212, 0, 0.18);
         }
 
         .admin-topbar-actions {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 7px;
             min-width: max-content;
+        }
+
+        .admin-site-link,
+        .admin-logout-small button,
+        .admin-menu-toggle {
+            font-family: Arial, "Segoe UI", sans-serif;
+            font-weight: 700;
         }
 
         .admin-site-link {
             text-decoration: none;
-            padding: 9px 12px;
-            border-radius: 12px;
+            padding: 9px 11px;
+            border-radius: 11px;
             background: #1c1c1c;
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255,255,255,.08);
             color: #ddd;
             font-size: 12px;
-            font-weight: bold;
         }
 
-        .admin-logout-small {
-            margin: 0;
-        }
-
+        .admin-logout-small { margin: 0; }
         .admin-logout-small button {
             margin: 0;
-            padding: 9px 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 100, 100, 0.28);
-            background: rgba(255, 80, 80, 0.09);
+            padding: 9px 11px;
+            border-radius: 11px;
+            border: 1px solid rgba(255, 100, 100, .28);
+            background: rgba(255, 80, 80, .09);
             color: #ff9b9b;
             cursor: pointer;
-            font-weight: bold;
+        }
+
+        .admin-menu-toggle {
+            display: none;
+            width: 42px;
+            height: 42px;
+            padding: 0;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 212, 0, .24);
+            background: #1b1b1b;
+            color: #ffd400;
+            font-size: 21px;
+            cursor: pointer;
         }
 
         .admin-main {
             max-width: 1180px;
             margin: 0 auto;
-            padding: 24px 18px 50px;
+            padding: 22px 16px 48px;
         }
 
         .card {
             background: linear-gradient(180deg, #202020, #151515);
-            border: 1px solid rgba(255, 212, 0, 0.15);
+            border: 1px solid rgba(255, 212, 0, .15);
             border-radius: 18px;
             padding: 20px;
             margin-bottom: 16px;
@@ -155,123 +161,92 @@
             padding: 11px 17px;
             background: #ffd400;
             color: #111;
+            font-family: Arial, "Segoe UI", sans-serif;
             font-weight: 800;
             cursor: pointer;
         }
 
-        input,
-        select,
-        textarea {
+        input, select, textarea {
             max-width: 100%;
             padding: 10px 12px;
             border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255,255,255,.12);
             background: #141414;
             color: #fff;
+            font: inherit;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th,
-        td {
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
             padding: 10px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+            border-bottom: 1px solid rgba(255,255,255,.07);
             text-align: right;
+            vertical-align: top;
         }
+        th { color: #ffd400; }
 
-        th {
-            color: #ffd400;
-        }
+        .success { color: #7cff8a; font-weight: bold; }
+        .error { color: #ff8a8a; font-weight: bold; }
+        .danger, .danger-btn { background: #8f2525; color: #fff; }
 
-        .success {
-            color: #7cff8a;
-            font-weight: bold;
-        }
-
-        .error {
-            color: #ff8a8a;
-            font-weight: bold;
-        }
-
-        .danger,
-        .danger-btn {
-            background: #8f2525;
-            color: #fff;
-        }
-
-        /* Unified admin typography and buttons */
-        button,
-        .admin-nav-link,
-        .admin-site-link,
-        .admin-action,
-        .admin-back-btn {
-            font-family: Arial, Helvetica, sans-serif;
-            letter-spacing: 0;
-            line-height: 1.25;
-        }
-
-        .admin-back-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 9px;
-            padding: 11px 18px;
-            border-radius: 12px;
-            background: #ffd400;
-            color: #111;
-            text-decoration: none;
-            font-size: 15px;
-            font-weight: 700;
-            box-shadow: none;
-            transition: 0.18s ease;
-        }
-
-        .admin-back-btn:hover {
-            background: #ffe04d;
-            transform: translateY(-1px);
-        }
+        .admin-mobile-panel { display: contents; }
 
         @media (max-width: 900px) {
             .admin-topbar-inner {
-                align-items: flex-start;
-                flex-direction: column;
+                grid-template-columns: 1fr auto;
+                padding: 10px 12px;
             }
 
+            .admin-menu-toggle { display: inline-grid; place-items: center; }
+
+            .admin-mobile-panel {
+                display: none;
+                grid-column: 1 / -1;
+                padding-top: 10px;
+                border-top: 1px solid rgba(255,212,0,.12);
+                margin-top: 2px;
+            }
+
+            .admin-mobile-panel.open { display: block; }
+
             .admin-nav {
-                width: 100%;
-                justify-content: flex-start;
-                flex-wrap: nowrap;
-                overflow-x: auto;
-                padding-bottom: 3px;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 7px;
+                margin-bottom: 9px;
             }
 
             .admin-nav-link {
-                white-space: nowrap;
+                display: block;
+                text-align: center;
+                padding: 11px 8px;
+                background: #191919;
+                border: 1px solid rgba(255,255,255,.07);
             }
 
             .admin-topbar-actions {
                 width: 100%;
-                justify-content: space-between;
-            }
-        }
-
-        @media (max-width: 600px) {
-            .admin-main {
-                padding: 14px 10px 35px;
-            }
-
-            .admin-brand-text span {
-                display: none;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 7px;
             }
 
             .admin-site-link,
             .admin-logout-small button {
-                font-size: 11px;
-                padding: 8px 10px;
+                width: 100%;
+                text-align: center;
+                padding: 11px 8px;
             }
+        }
+
+        @media (max-width: 600px) {
+            .admin-main { padding: 12px 8px 32px; }
+            .card { padding: 14px; border-radius: 15px; }
+            .admin-brand-text span { display: none; }
+            .admin-brand-icon { width: 34px; height: 34px; }
+            .admin-nav { grid-template-columns: 1fr; }
+            .admin-topbar-actions { grid-template-columns: 1fr; }
+            h1, h2 { line-height: 1.25; }
         }
     </style>
 
@@ -283,7 +258,6 @@
     {% if is_admin %}
     <header class="admin-topbar">
         <div class="admin-topbar-inner">
-
             <div class="admin-brand">
                 <div class="admin-brand-icon">A</div>
                 <div class="admin-brand-text">
@@ -292,23 +266,25 @@
                 </div>
             </div>
 
-            <nav class="admin-nav">
-                <a class="admin-nav-link" href="{{ url_for('admin') }}">🏠 ראשי</a>
-                <a class="admin-nav-link" href="{{ url_for('admin_prediction_status') }}">📋 סטטוס ניחושים</a>
-                <a class="admin-nav-link" href="{{ url_for('admin_matches') }}">⚽ משחקים</a>
-                <a class="admin-nav-link" href="{{ url_for('admin_users') }}">👥 משתתפים</a>
-                <a class="admin-nav-link" href="{{ url_for('admin_test') }}">🧪 Test Mode</a>
-            </nav>
+            <button class="admin-menu-toggle" type="button" id="adminMenuToggle" aria-label="פתיחת תפריט">☰</button>
 
-            <div class="admin-topbar-actions">
-                <a class="admin-site-link" href="{{ url_for('home') }}">↩️ חזרה לאתר</a>
+            <div class="admin-mobile-panel" id="adminMobilePanel">
+                <nav class="admin-nav">
+                    <a class="admin-nav-link" href="{{ url_for('admin') }}">🏠 ראשי</a>
+                    <a class="admin-nav-link" href="{{ url_for('admin_prediction_status') }}">📋 סטטוס ניחושים</a>
+                    <a class="admin-nav-link" href="{{ url_for('admin_matches') }}">⚽ משחקים</a>
+                    <a class="admin-nav-link" href="{{ url_for('admin_users') }}">👥 משתתפים</a>
+                    <a class="admin-nav-link" href="{{ url_for('admin_test') }}">🧪 Test Mode</a>
+                </nav>
 
-                <form class="admin-logout-small" method="POST" action="{{ url_for('admin') }}">
-                    <input type="hidden" name="action" value="logout">
-                    <button type="submit">🚪 יציאה</button>
-                </form>
+                <div class="admin-topbar-actions">
+                    <a class="admin-site-link" href="{{ url_for('home') }}">↩️ חזרה לאתר</a>
+                    <form class="admin-logout-small" method="POST" action="{{ url_for('admin') }}">
+                        <input type="hidden" name="action" value="logout">
+                        <button type="submit">🚪 יציאה</button>
+                    </form>
+                </div>
             </div>
-
         </div>
     </header>
     {% endif %}
@@ -318,5 +294,18 @@
     </main>
 
 </div>
+
+<script>
+(function () {
+    const toggle = document.getElementById('adminMenuToggle');
+    const panel = document.getElementById('adminMobilePanel');
+    if (!toggle || !panel) return;
+
+    toggle.addEventListener('click', function () {
+        panel.classList.toggle('open');
+        toggle.textContent = panel.classList.contains('open') ? '✕' : '☰';
+    });
+})();
+</script>
 </body>
 </html>
