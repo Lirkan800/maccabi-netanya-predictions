@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin{% endblock %}</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #0f0f0f;
+            color: #f3f3f3;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .admin-layout {
+            min-height: 100vh;
+        }
+
+        .admin-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(15, 15, 15, 0.97);
+            border-bottom: 1px solid rgba(255, 212, 0, 0.18);
+            backdrop-filter: blur(10px);
+        }
+
+        .admin-topbar-inner {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .admin-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: max-content;
+        }
+
+        .admin-brand-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            background: #ffd400;
+            color: #111;
+            font-size: 19px;
+            font-weight: 900;
+        }
+
+        .admin-brand-text strong {
+            display: block;
+            color: #ffd400;
+            font-size: 15px;
+        }
+
+        .admin-brand-text span {
+            display: block;
+            color: #888;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .admin-nav {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+
+        .admin-nav-link {
+            text-decoration: none;
+            padding: 9px 12px;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            color: #ccc;
+            font-size: 13px;
+            font-weight: bold;
+            transition: 0.18s ease;
+        }
+
+        .admin-nav-link:hover {
+            color: #ffd400;
+            background: rgba(255, 212, 0, 0.07);
+            border-color: rgba(255, 212, 0, 0.18);
+        }
+
+        .admin-topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: max-content;
+        }
+
+        .admin-site-link {
+            text-decoration: none;
+            padding: 9px 12px;
+            border-radius: 12px;
+            background: #1c1c1c;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #ddd;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .admin-logout-small {
+            margin: 0;
+        }
+
+        .admin-logout-small button {
+            margin: 0;
+            padding: 9px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 100, 100, 0.28);
+            background: rgba(255, 80, 80, 0.09);
+            color: #ff9b9b;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .admin-main {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 24px 18px 50px;
+        }
+
+        .card {
+            background: linear-gradient(180deg, #202020, #151515);
+            border: 1px solid rgba(255, 212, 0, 0.15);
+            border-radius: 18px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        button {
+            border: none;
+            border-radius: 12px;
+            padding: 11px 17px;
+            background: #ffd400;
+            color: #111;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        input,
+        select,
+        textarea {
+            max-width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: #141414;
+            color: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+            text-align: right;
+        }
+
+        th {
+            color: #ffd400;
+        }
+
+        .success {
+            color: #7cff8a;
+            font-weight: bold;
+        }
+
+        .error {
+            color: #ff8a8a;
+            font-weight: bold;
+        }
+
+        .danger,
+        .danger-btn {
+            background: #8f2525;
+            color: #fff;
+        }
+
+        /* Unified admin typography and buttons */
+        button,
+        .admin-nav-link,
+        .admin-site-link,
+        .admin-action,
+        .admin-back-btn {
+            font-family: Arial, Helvetica, sans-serif;
+            letter-spacing: 0;
+            line-height: 1.25;
+        }
+
+        .admin-back-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            padding: 11px 18px;
+            border-radius: 12px;
+            background: #ffd400;
+            color: #111;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 700;
+            box-shadow: none;
+            transition: 0.18s ease;
+        }
+
+        .admin-back-btn:hover {
+            background: #ffe04d;
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 900px) {
+            .admin-topbar-inner {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .admin-nav {
+                width: 100%;
+                justify-content: flex-start;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                padding-bottom: 3px;
+            }
+
+            .admin-nav-link {
+                white-space: nowrap;
+            }
+
+            .admin-topbar-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .admin-main {
+                padding: 14px 10px 35px;
+            }
+
+            .admin-brand-text span {
+                display: none;
+            }
+
+            .admin-site-link,
+            .admin-logout-small button {
+                font-size: 11px;
+                padding: 8px 10px;
+            }
+        }
+    </style>
+
+    {% block admin_head %}{% endblock %}
+</head>
+<body>
+<div class="admin-layout">
+
+    {% if is_admin %}
+    <header class="admin-topbar">
+        <div class="admin-topbar-inner">
+
+            <div class="admin-brand">
+                <div class="admin-brand-icon">A</div>
+                <div class="admin-brand-text">
+                    <strong>מרכז השליטה</strong>
+                    <span>ניהול אתר הניחושים</span>
+                </div>
+            </div>
+
+            <nav class="admin-nav">
+                <a class="admin-nav-link" href="{{ url_for('admin') }}">🏠 ראשי</a>
+                <a class="admin-nav-link" href="{{ url_for('admin_prediction_status') }}">📋 סטטוס ניחושים</a>
+                <a class="admin-nav-link" href="{{ url_for('admin_matches') }}">⚽ משחקים</a>
+                <a class="admin-nav-link" href="{{ url_for('admin_users') }}">👥 משתתפים</a>
+                <a class="admin-nav-link" href="{{ url_for('admin_test') }}">🧪 Test Mode</a>
+            </nav>
+
+            <div class="admin-topbar-actions">
+                <a class="admin-site-link" href="{{ url_for('home') }}">↩️ חזרה לאתר</a>
+
+                <form class="admin-logout-small" method="POST" action="{{ url_for('admin') }}">
+                    <input type="hidden" name="action" value="logout">
+                    <button type="submit">🚪 יציאה</button>
+                </form>
+            </div>
+
+        </div>
+    </header>
+    {% endif %}
+
+    <main class="admin-main">
+        {% block content %}{% endblock %}
+    </main>
+
+</div>
+</body>
+</html>

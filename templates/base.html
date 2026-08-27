@@ -382,11 +382,6 @@
 
     <a class="{% if request.path == '/admin' %}active{% endif %}" href="/admin">🔐 Admin</a>
 
-    {% if is_admin %}
-        <a class="{% if request.path == '/admin/users' %}active{% endif %}" href="/admin/users">👥 ניהול משתתפים</a>
-        <a class="{% if request.path == '/admin/test' %}active{% endif %}" href="/admin/test">🧪 Test Mode</a>
-        <a class="{% if request.path == '/admin/matches' %}active{% endif %}" href="/admin/matches">⚽ ניהול משחקים</a>
-    {% endif %}
 </div>
 
 <div class="container">

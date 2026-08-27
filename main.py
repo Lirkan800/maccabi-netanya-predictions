@@ -1606,14 +1606,91 @@ def admin():
             for player_data in players.values()
         )
 
+    # Prediction completion summary for the current/live match.
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    prediction_match = live_match or next_match
+
+    prediction_count = 0
+    missing_prediction_count = total_players
+
+    if prediction_match:
+        predictions_list = load_predictions()
+        predicted_players = {
+            prediction["player"]
+            for prediction in predictions_list
+            if prediction.get("match_id") == prediction_match.get("id")
+        }
+        prediction_count = sum(1 for player_name in players if player_name in predicted_players)
+        missing_prediction_count = max(total_players - prediction_count, 0)
+
     return render_template(
         "admin.html",
         error=error,
         total_players=total_players,
         leader_name=leader_name,
         leader_points=leader_points,
-        highest_streak=highest_streak
+        highest_streak=highest_streak,
+        prediction_match=prediction_match,
+        prediction_count=prediction_count,
+        missing_prediction_count=missing_prediction_count
     )
+
+
+@app.route("/admin/prediction-status")
+def admin_prediction_status():
+    if not is_admin():
+        return redirect(url_for("admin"))
+
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    match = live_match or next_match
+    is_live = live_match is not None
+
+    prediction_status = []
+    predicted_count = 0
+    missing_count = 0
+    locked = False
+    progress_percent = 0
+
+    if match:
+        predictions_list = load_predictions()
+        predicted_players = {
+            prediction["player"]
+            for prediction in predictions_list
+            if prediction.get("match_id") == match.get("id")
+        }
+
+        locked = is_live or is_match_locked(match)
+
+        for player_name in sorted(players.keys()):
+            has_prediction = player_name in predicted_players
+            if has_prediction:
+                predicted_count += 1
+            else:
+                missing_count += 1
+
+            prediction_status.append({
+                "player": player_name,
+                "has_prediction": has_prediction
+            })
+
+        if players:
+            progress_percent = round((predicted_count / len(players)) * 100)
+
+    return render_template(
+        "admin_prediction_status.html",
+        match=match,
+        is_live=is_live,
+        locked=locked,
+        prediction_status=prediction_status,
+        total_players=len(players),
+        predicted_count=predicted_count,
+        missing_count=missing_count,
+        progress_percent=progress_percent
+    )
+
+
 @app.route("/admin/matches", methods=["GET", "POST"])
 def admin_matches():
     if not is_admin():

@@ -1,57 +1,322 @@
-{% extends "base.html" %}
+{% extends "admin_base.html" %}
 
 {% block title %}Admin{% endblock %}
 
 {% block content %}
 
-<div class="card">
-    <h2>🔐 מרכז השליטה</h2>
+<style>
+.admin-shell {
+    max-width: 1050px;
+    margin: 0 auto;
+}
+
+.admin-hero {
+    background: linear-gradient(135deg, rgba(255,212,0,0.16), rgba(255,212,0,0.04));
+    border: 1px solid rgba(255,212,0,0.28);
+    border-radius: 24px;
+    padding: 26px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.admin-hero h2 {
+    margin: 0 0 8px;
+}
+
+.admin-subtitle {
+    color: #aaa;
+    margin: 0;
+}
+
+.admin-login {
+    max-width: 420px;
+    margin: 30px auto 0;
+    background: #181818;
+    border: 1px solid rgba(255,212,0,0.22);
+    border-radius: 20px;
+    padding: 24px;
+}
+
+.admin-login input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 8px;
+}
+
+.admin-login button {
+    width: 100%;
+    min-height: 46px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0;
+    border-radius: 12px;
+}
+
+.admin-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin: 18px 0;
+}
+
+.admin-stat {
+    background: linear-gradient(180deg, #252525, #171717);
+    border: 1px solid rgba(255,212,0,0.18);
+    border-radius: 18px;
+    padding: 18px 14px;
+    text-align: center;
+}
+
+.admin-stat-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.admin-stat-label {
+    color: #aaa;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.admin-stat-value {
+    color: #ffd400;
+    font-size: 24px;
+    font-weight: 900;
+    margin-top: 5px;
+}
+
+.prediction-overview {
+    background: linear-gradient(180deg, #232323, #151515);
+    border: 1px solid rgba(255,212,0,0.28);
+    border-radius: 20px;
+    padding: 20px;
+    margin-top: 18px;
+}
+
+.prediction-overview-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.prediction-match-name {
+    font-weight: bold;
+    font-size: 17px;
+}
+
+.prediction-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.admin-pill {
+    display: inline-block;
+    padding: 7px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.pill-good {
+    color: #7CFF8A;
+    background: rgba(76,175,80,0.12);
+    border: 1px solid rgba(76,175,80,0.3);
+}
+
+.pill-warn {
+    color: #ffb74d;
+    background: rgba(255,183,77,0.1);
+    border: 1px solid rgba(255,183,77,0.3);
+}
+
+.admin-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.admin-action {
+    display: block;
+    text-decoration: none;
+    background: #1c1c1c;
+    color: #fff;
+    border: 1px solid rgba(255,212,0,0.2);
+    border-radius: 16px;
+    padding: 18px 12px;
+    text-align: center;
+    font-weight: bold;
+    transition: 0.2s ease;
+}
+
+.admin-action:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255,212,0,0.6);
+    background: #242424;
+}
+
+.admin-action-icon {
+    display: block;
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.admin-logout {
+    margin-top: 20px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .admin-hero {
+        padding: 18px 12px;
+        border-radius: 18px;
+    }
+
+    .admin-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .admin-stat {
+        padding: 13px 8px;
+        border-radius: 14px;
+    }
+
+    .admin-stat-icon {
+        font-size: 22px;
+    }
+
+    .admin-stat-label {
+        font-size: 11px;
+    }
+
+    .admin-stat-value {
+        font-size: 19px;
+    }
+
+    .admin-actions {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .admin-action {
+        padding: 14px 8px;
+        font-size: 13px;
+    }
+
+    .admin-action-icon {
+        font-size: 22px;
+    }
+
+    .prediction-overview {
+        padding: 15px;
+        border-radius: 16px;
+    }
+}
+</style>
+
+<div class="admin-shell">
+
+    <div class="admin-hero">
+        <h2>🔐 מרכז השליטה</h2>
+        <p class="admin-subtitle">ניהול העונה, המשתתפים והמשחקים במקום אחד</p>
+    </div>
 
     {% if error %}
         <p class="error">{{ error }}</p>
     {% endif %}
 
     {% if not is_admin %}
-        <form method="POST">
-            <p>סיסמת מנהל</p>
-            <input type="password" name="admin_password">
-            <br><br>
-            <button type="submit" name="action" value="login">כניסה</button>
-        </form>
-    {% else %}
 
-        <p class="success">אתה מחובר כמנהל.</p>
-
-        <div class="card">
-            <h3>📊 מצב המערכת</h3>
-            <p>👥 מספר משתתפים: <strong>{{ total_players }}</strong></p>
-            <p>🏆 מוביל הטבלה: <strong>{{ leader_name }}</strong> עם {{ leader_points }} נקודות</p>
-            <p>🔥 הרצף הגבוה כרגע: <strong>{{ highest_streak }}</strong></p>
+        <div class="admin-login">
+            <form method="POST">
+                <label><strong>סיסמת מנהל</strong></label>
+                <input type="password" name="admin_password" required autocomplete="current-password">
+                <br><br>
+                <button type="submit" name="action" value="login">כניסה למערכת הניהול</button>
+            </form>
         </div>
 
-        <div class="card">
-    <h3>⚙️ פעולות מהירות</h3>
+    {% else %}
 
-    <a href="/admin/users">
-        <button>👥 ניהול משתתפים</button>
-    </a>
+        <p class="success" style="text-align:center;">✅ מחובר כמנהל</p>
 
-    <a href="/admin/matches">
-        <button>⚽ ניהול משחקים</button>
-    </a>
+        <div class="admin-grid">
+            <div class="admin-stat">
+                <div class="admin-stat-icon">👥</div>
+                <div class="admin-stat-label">משתתפים</div>
+                <div class="admin-stat-value">{{ total_players }}</div>
+            </div>
 
-    <a href="/admin/test">
-        <button>🧪 Test Mode</button>
-    </a>
-</div>
+            <div class="admin-stat">
+                <div class="admin-stat-icon">🏆</div>
+                <div class="admin-stat-label">מוביל הטבלה</div>
+                <div class="admin-stat-value" style="font-size:18px;">{{ leader_name }}</div>
+                <div style="color:#aaa; font-size:12px; margin-top:4px;">{{ leader_points }} נק׳</div>
+            </div>
 
-        <form method="POST">
-            <button class="danger" type="submit" name="action" value="logout">
-                יציאה ממצב מנהל
-            </button>
-        </form>
+            <div class="admin-stat">
+                <div class="admin-stat-icon">🔥</div>
+                <div class="admin-stat-label">רצף גבוה</div>
+                <div class="admin-stat-value">{{ highest_streak }}</div>
+            </div>
+
+            <div class="admin-stat">
+                <div class="admin-stat-icon">🎯</div>
+                <div class="admin-stat-label">ניחשו למשחק הקרוב</div>
+                <div class="admin-stat-value">{{ prediction_count }}/{{ total_players }}</div>
+            </div>
+        </div>
+
+        <div class="prediction-overview">
+            <div class="prediction-overview-top">
+                <div>
+                    <h3 style="margin:0 0 6px;">📋 סטטוס ניחושים</h3>
+
+                    {% if prediction_match %}
+                        <div class="prediction-match-name">
+                            {{ prediction_match.home_team }} - {{ prediction_match.away_team }}
+                        </div>
+                    {% else %}
+                        <div style="color:#aaa;">אין כרגע משחק קרוב לבדיקה</div>
+                    {% endif %}
+                </div>
+
+                {% if prediction_match %}
+                    <div class="prediction-badges">
+                        <span class="admin-pill pill-good">✅ ניחשו: {{ prediction_count }}</span>
+                        <span class="admin-pill {% if missing_prediction_count == 0 %}pill-good{% else %}pill-warn{% endif %}">
+                            {% if missing_prediction_count == 0 %}
+                                ✅ כולם ניחשו
+                            {% else %}
+                                ⏳ חסרים: {{ missing_prediction_count }}
+                            {% endif %}
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-top:15px;">
+                <a href="{{ url_for('admin_prediction_status') }}" class="admin-action" style="padding:12px 16px;">
+                    👀 הצג מי ניחש ומי עדיין לא
+                </a>
+            </div>
+        </div>
+
+        <div class="admin-logout">
+            <form method="POST">
+                <button class="danger" type="submit" name="action" value="logout">
+                    🚪 יציאה ממצב מנהל
+                </button>
+            </form>
+        </div>
 
     {% endif %}
+
 </div>
 
 {% endblock %}
