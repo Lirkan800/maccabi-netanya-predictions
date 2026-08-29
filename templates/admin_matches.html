@@ -82,10 +82,12 @@
                 <td>{% if match.api_fixture_id %}<span class="success">✅ מחובר</span><br><small>{{ match.api_fixture_id }}</small>{% else %}<span class="error">❌ לא מחובר</span>{% endif %}</td>
                 <td>
                     {% if match.status == "finished" %}חושב
-                    {% elif match.api_fixture_id %}
-                    <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><button type="submit" name="action" value="check_api_result">בדוק API</button></form>
                     {% else %}
-                    <form method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><input type="number" name="actual_home" min="0" value="0" style="width:65px"> - <input type="number" name="actual_away" min="0" value="0" style="width:65px"><br><br><button type="submit" name="action" value="finish_match">סיים ידנית</button></form>
+                        {% if match.api_fixture_id %}
+                        <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><button type="submit" name="action" value="check_api_result">בדוק API</button></form>
+                        <br>
+                        {% endif %}
+                        <form method="POST" onsubmit="return confirm('לסיים את המשחק ידנית ולחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><input type="number" name="actual_home" min="0" value="0" style="width:65px"> - <input type="number" name="actual_away" min="0" value="0" style="width:65px"><br><br><button type="submit" name="action" value="finish_match">סיים ידנית</button></form>
                     {% endif %}
                 </td>
                 <td><form method="POST" onsubmit="return confirm('בטוח למחוק את המשחק הזה?');"><input type="hidden" name="match_id" value="{{ match.id }}"><button class="danger" type="submit" name="action" value="delete_match">מחק</button></form></td>
@@ -108,13 +110,15 @@
             <div class="match-mobile-actions">
                 {% if match.status == "finished" %}
                     <div class="success">✅ המשחק כבר חושב</div>
-                {% elif match.api_fixture_id %}
+                {% else %}
+                    {% if match.api_fixture_id %}
                     <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');">
                         <input type="hidden" name="match_id" value="{{ match.id }}">
                         <button type="submit" name="action" value="check_api_result">בדוק API וחשב ניקוד</button>
                     </form>
-                {% else %}
-                    <form method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');">
+                    <br>
+                    {% endif %}
+                    <form method="POST" onsubmit="return confirm('לסיים את המשחק ידנית ולחשב ניקוד?');">
                         <input type="hidden" name="match_id" value="{{ match.id }}">
                         <div class="score-inline"><input type="number" name="actual_home" min="0" value="0"><span>-</span><input type="number" name="actual_away" min="0" value="0"></div>
                         <br>
