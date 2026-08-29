@@ -562,64 +562,136 @@ def save_single_prediction(match_id, player, guess_home, guess_away):
 
 
 def load_settings():
-    api_key = os.environ.get("API_FOOTBALL_KEY")
-    if api_key:
-        return {"api_football_key": api_key}
-
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-
-    return {"api_football_key": ""}
+    # TheSportsDB V1 key. The free account currently uses 123.
+    api_key = os.environ.get("SPORTSDB_API_KEY", "123").strip()
+    return {"sportsdb_api_key": api_key or "123"}
 
 
 init_db()
 players = load_players()
 
 
-def get_api_fixture_by_id(fixture_id):
+SPORTSDB_TEAM_ID = 134087
+SPORTSDB_BASE_URL = "https://www.thesportsdb.com/api/v1/json"
+
+
+def _sportsdb_request(endpoint, params=None):
     settings = load_settings()
-    api_key = settings["api_football_key"]
+    api_key = settings["sportsdb_api_key"]
+    url = f"{SPORTSDB_BASE_URL}/{api_key}/{endpoint}"
 
-    url = "https://v3.football.api-sports.io/fixtures"
+    response = requests.get(url, params=params or {}, timeout=10)
+    response.raise_for_status()
+    return response.json()
 
-    headers = {
-        "x-apisports-key": api_key
-    }
 
-    params = {
-        "id": fixture_id
-    }
+def _sportsdb_event_to_legacy_fixture(event):
+    """Convert a TheSportsDB event to the old internal API-Football shape.
 
-    response = requests.get(url, headers=headers, params=params, timeout=10)
-    data = response.json()
-
-    fixtures = data.get("response", [])
-
-    if not fixtures:
+    Keeping the internal shape means the rest of the site (locking, admin sync,
+    scoring and manual fallback) does not need to change.
+    """
+    if not event:
         return None
 
-    return fixtures[0]
+    sportsdb_home_id = event.get("idHomeTeam")
+    sportsdb_away_id = event.get("idAwayTeam")
+
+    # Keep Netanya's historic API-Football team ID internally because existing
+    # rows already use 4505. Other teams may use their TheSportsDB IDs.
+    home_id = NETANYA_TEAM_ID if str(sportsdb_home_id) == str(SPORTSDB_TEAM_ID) else sportsdb_home_id
+    away_id = NETANYA_TEAM_ID if str(sportsdb_away_id) == str(SPORTSDB_TEAM_ID) else sportsdb_away_id
+
+    # strTimestamp is UTC in TheSportsDB and is ideal for the existing Israel
+    # timezone conversion code. Fall back to local date/time if unavailable.
+    timestamp = event.get("strTimestamp")
+    if timestamp:
+        fixture_date = timestamp if timestamp.endswith("Z") else timestamp + "Z"
+    else:
+        local_date = event.get("dateEventLocal") or event.get("dateEvent") or ""
+        local_time = event.get("strTimeLocal") or event.get("strTime") or "00:00:00"
+        try:
+            local_dt = datetime.fromisoformat(f"{local_date}T{local_time}")
+            # Convert the supplied Israel-local fallback back to UTC so the
+            # existing api_datetime_to_israel() conversion remains correct.
+            guessed_utc = local_dt - israel_utc_offset(local_dt - timedelta(hours=2))
+            fixture_date = guessed_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except (TypeError, ValueError):
+            fixture_date = f"{event.get('dateEvent', '')}T{event.get('strTime', '00:00:00')}Z"
+
+    legacy_fixture_id = event.get("idAPIfootball") or event.get("idEvent")
+
+    return {
+        "fixture": {
+            "id": int(legacy_fixture_id) if str(legacy_fixture_id or "").isdigit() else legacy_fixture_id,
+            "sportsdb_event_id": event.get("idEvent"),
+            "date": fixture_date,
+            "status": {"short": event.get("strStatus") or "NS"},
+        },
+        "teams": {
+            "home": {"id": int(home_id) if str(home_id or "").isdigit() else home_id, "name": event.get("strHomeTeam")},
+            "away": {"id": int(away_id) if str(away_id or "").isdigit() else away_id, "name": event.get("strAwayTeam")},
+        },
+        "goals": {
+            "home": int(event["intHomeScore"]) if event.get("intHomeScore") not in (None, "") else None,
+            "away": int(event["intAwayScore"]) if event.get("intAwayScore") not in (None, "") else None,
+        },
+        "_sportsdb": event,
+    }
+
+
+def _get_netanya_sportsdb_events():
+    """Return recent + upcoming Netanya events, deduplicated by idEvent."""
+    events = []
+    seen = set()
+
+    for endpoint in ("eventslast.php", "eventsnext.php"):
+        data = _sportsdb_request(endpoint, {"id": SPORTSDB_TEAM_ID})
+        for event in data.get("results") or data.get("events") or []:
+            event_id = str(event.get("idEvent") or "")
+            if event_id and event_id not in seen:
+                seen.add(event_id)
+                events.append(event)
+
+    return events
+
+
+def get_api_fixture_by_id(fixture_id):
+    """Lookup by TheSportsDB idEvent or by the old API-Football fixture ID."""
+    fixture_id = str(fixture_id).strip()
+
+    # First try it as a native TheSportsDB Event ID.
+    try:
+        data = _sportsdb_request("lookupevent.php", {"id": fixture_id})
+        direct_events = data.get("events") or []
+        if direct_events:
+            return _sportsdb_event_to_legacy_fixture(direct_events[0])
+    except (requests.RequestException, ValueError):
+        pass
+
+    # Existing database rows contain API-Football fixture IDs. TheSportsDB
+    # exposes idAPIfootball, so map those IDs without changing the DB schema.
+    try:
+        for event in _get_netanya_sportsdb_events():
+            if str(event.get("idAPIfootball") or "") == fixture_id:
+                return _sportsdb_event_to_legacy_fixture(event)
+    except (requests.RequestException, ValueError):
+        return None
+
+    return None
+
 
 def get_api_fixtures_by_date(match_date):
-    settings = load_settings()
-    api_key = settings["api_football_key"]
-
-    url = "https://v3.football.api-sports.io/fixtures"
-
-    headers = {
-        "x-apisports-key": api_key
-    }
-
-    params = {
-        "date": match_date
-    }
-
-    response = requests.get(url, headers=headers, params=params, timeout=10)
-    data = response.json()
-
-    return data.get("response", []), data.get("errors", {})
-
+    """Return Netanya fixtures for a date using TheSportsDB."""
+    try:
+        fixtures = []
+        for event in _get_netanya_sportsdb_events():
+            event_date = event.get("dateEventLocal") or event.get("dateEvent")
+            if event_date == match_date:
+                fixtures.append(_sportsdb_event_to_legacy_fixture(event))
+        return fixtures, {}
+    except (requests.RequestException, ValueError) as exc:
+        return [], {"TheSportsDB": str(exc)}
 
 
 def _normalize_team_name(name):
@@ -1740,7 +1812,7 @@ def admin_matches():
                         )
 
                         match["api_fixture_id"] = fixture["id"]
-                        match["source"] = "api"
+                        match["source"] = "thesportsdb"
                         sync_match_order_from_api(match, api_fixture, only_before_kickoff=True)
                         match["match_date"] = local_datetime.strftime("%Y-%m-%d")
                         match["match_time"] = local_datetime.strftime("%H:%M")
@@ -1786,7 +1858,7 @@ def admin_matches():
                         new_match = {
                             "id": str(uuid.uuid4()),
                             "api_fixture_id": int(api_fixture_id),
-                            "source": "api",
+                            "source": "thesportsdb",
                             "home_team": teams_data["home"]["name"],
                             "away_team": teams_data["away"]["name"],
                             "home_team_id": teams_data["home"]["id"],
@@ -2113,7 +2185,7 @@ def cron_update_match_times():
         )
         match["match_date"] = local_datetime.strftime("%Y-%m-%d")
         match["match_time"] = local_datetime.strftime("%H:%M")
-        match["source"] = "api"
+        match["source"] = "thesportsdb"
 
         updated += 1
 
@@ -2233,7 +2305,7 @@ def auto_attach_fixture_if_needed(matches):
                 israel_datetime = api_datetime_to_israel(fixture_date)
 
                 match["api_fixture_id"] = fixture.get("id")
-                match["source"] = "api"
+                match["source"] = "thesportsdb"
                 sync_match_order_from_api(
                     match,
                     api_fixture,
@@ -2325,7 +2397,7 @@ def admin_api_sync():
                     changed = True
 
                 if match.get("source") != "api":
-                    match["source"] = "api"
+                    match["source"] = "thesportsdb"
                     changed = True
 
             continue

@@ -35,16 +35,16 @@
 
     <div class="matches-tools">
         <div class="tool-box">
-            <h3>🌍 API</h3>
+            <h3>🌍 TheSportsDB</h3>
             <form method="POST">
-                <label>Fixture ID</label>
-                <input type="text" name="api_fixture_id" placeholder="לדוגמה: 1489385">
+                <label>TheSportsDB Event ID</label>
+                <input type="text" name="api_fixture_id" placeholder="לדוגמה: 2493556">
                 <br><br>
-                <button type="submit" name="action" value="import_api_match">ייבא משחק מה-API</button>
+                <button type="submit" name="action" value="import_api_match">ייבא משחק מ-TheSportsDB</button>
             </form>
             <br>
             <form method="POST">
-                <button type="submit" name="action" value="attach_netanya_api">חבר משחקי נתניה ל-API לפי תאריך</button>
+                <button type="submit" name="action" value="attach_netanya_api">חבר משחקי נתניה ל-TheSportsDB לפי תאריך</button>
             </form>
         </div>
 
@@ -84,7 +84,7 @@
                     {% if match.status == "finished" %}חושב
                     {% else %}
                         {% if match.api_fixture_id %}
-                        <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><button type="submit" name="action" value="check_api_result">בדוק API</button></form>
+                        <form method="POST" onsubmit="return confirm('לבדוק תוצאה מ-TheSportsDB ואם המשחק הסתיים לחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><button type="submit" name="action" value="check_api_result">בדוק TheSportsDB</button></form>
                         <br>
                         {% endif %}
                         <form method="POST" onsubmit="return confirm('לסיים את המשחק ידנית ולחשב ניקוד?');"><input type="hidden" name="match_id" value="{{ match.id }}"><input type="number" name="actual_home" min="0" value="0" style="width:65px"> - <input type="number" name="actual_away" min="0" value="0" style="width:65px"><br><br><button type="submit" name="action" value="finish_match">סיים ידנית</button></form>
@@ -112,9 +112,9 @@
                     <div class="success">✅ המשחק כבר חושב</div>
                 {% else %}
                     {% if match.api_fixture_id %}
-                    <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ואם המשחק הסתיים לחשב ניקוד?');">
+                    <form method="POST" onsubmit="return confirm('לבדוק תוצאה מ-TheSportsDB ואם המשחק הסתיים לחשב ניקוד?');">
                         <input type="hidden" name="match_id" value="{{ match.id }}">
-                        <button type="submit" name="action" value="check_api_result">בדוק API וחשב ניקוד</button>
+                        <button type="submit" name="action" value="check_api_result">בדוק TheSportsDB וחשב ניקוד</button>
                     </form>
                     <br>
                     {% endif %}
