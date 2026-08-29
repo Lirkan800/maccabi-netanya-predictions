@@ -1,6 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from functools import wraps
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import uuid
 import json
@@ -16,6 +16,37 @@ app.secret_key = os.environ.get("SECRET_KEY", "temporary_secret_key_for_test")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Phxyuejhhoakh!")
 AUTO_SYNC_TOKEN = os.environ.get("AUTO_SYNC_TOKEN", "change_me_auto_sync_token")
 NETANYA_TEAM_ID = 4505
+ADMIN_API_COOLDOWN_MINUTES = 20
+def israel_utc_offset(dt_utc):
+    """Return Israel UTC offset (2h winter / 3h DST) without zoneinfo."""
+    year = dt_utc.year
+
+    # Israel DST starts on the Friday before the last Sunday in March at 00:00 UTC.
+    march31 = datetime(year, 3, 31)
+    last_sunday_march = march31 - timedelta(days=(march31.weekday() + 1) % 7)
+    dst_start = last_sunday_march - timedelta(days=2)
+
+    # Israel DST ends on the last Sunday in October at 23:00 UTC on Saturday.
+    october31 = datetime(year, 10, 31)
+    last_sunday_october = october31 - timedelta(days=(october31.weekday() + 1) % 7)
+    dst_end = last_sunday_october - timedelta(days=1) + timedelta(hours=23)
+
+    naive_utc = dt_utc.replace(tzinfo=None)
+    return timedelta(hours=3 if dst_start <= naive_utc < dst_end else 2)
+
+
+def israel_now():
+    now_utc = datetime.utcnow()
+    return now_utc + israel_utc_offset(now_utc)
+
+
+def api_datetime_to_israel(date_string):
+    dt = datetime.fromisoformat(date_string.replace("Z", "+00:00"))
+    if dt.tzinfo is not None:
+        dt_utc = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    else:
+        dt_utc = dt
+    return dt_utc + israel_utc_offset(dt_utc)
 SETTINGS_FILE = "data/settings.json"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SQLITE_DB = os.environ.get("SQLITE_DB", "data/app.db")
@@ -229,6 +260,48 @@ def init_db():
             conn.commit()
             cur.close()
 
+    # Persistent key/value state used for production-safe cooldowns.
+    db_execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_state (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+
+
+def get_app_state(key, default=None):
+    placeholder = "%s" if is_postgres() else "?"
+    row = db_execute(
+        f"SELECT value FROM app_state WHERE key = {placeholder}",
+        [key],
+        fetchone=True
+    )
+    if not row:
+        return default
+    return row.get("value", default)
+
+
+def set_app_state(key, value):
+    placeholder = "%s" if is_postgres() else "?"
+    existing = db_execute(
+        f"SELECT key FROM app_state WHERE key = {placeholder}",
+        [key],
+        fetchone=True
+    )
+
+    if existing:
+        db_execute(
+            f"UPDATE app_state SET value = {placeholder} WHERE key = {placeholder}",
+            [str(value), key]
+        )
+    else:
+        db_execute(
+            f"INSERT INTO app_state (key, value) VALUES ({placeholder}, {placeholder})",
+            [key, str(value)]
+        )
+
 
 def load_players():
     rows = db_execute(
@@ -432,6 +505,62 @@ def save_predictions(predictions):
         cur.close()
 
 
+def save_single_prediction(match_id, player, guess_home, guess_away):
+    """
+    Safely insert or update one user's prediction without deleting or rewriting
+    anyone else's prediction. This is the normal save path for prediction forms.
+
+    Returns True when an existing prediction was updated, False when a new one
+    was created.
+    """
+    with get_db_connection() as conn:
+        cur = conn.cursor()
+
+        if is_postgres():
+            cur.execute(
+                "SELECT 1 FROM predictions WHERE match_id = %s AND player = %s",
+                (match_id, player)
+            )
+            existed = cur.fetchone() is not None
+
+            cur.execute(
+                """
+                INSERT INTO predictions
+                    (match_id, player, guess_home, guess_away, points, bonus, exact, match_finished)
+                VALUES (%s, %s, %s, %s, 0, 0, FALSE, FALSE)
+                ON CONFLICT (match_id, player)
+                DO UPDATE SET
+                    guess_home = EXCLUDED.guess_home,
+                    guess_away = EXCLUDED.guess_away
+                """,
+                (match_id, player, int(guess_home), int(guess_away))
+            )
+        else:
+            cur.execute(
+                "SELECT 1 FROM predictions WHERE match_id = ? AND player = ?",
+                (match_id, player)
+            )
+            existed = cur.fetchone() is not None
+
+            cur.execute(
+                """
+                INSERT INTO predictions
+                    (match_id, player, guess_home, guess_away, points, bonus, exact, match_finished)
+                VALUES (?, ?, ?, ?, 0, 0, 0, 0)
+                ON CONFLICT(match_id, player)
+                DO UPDATE SET
+                    guess_home = excluded.guess_home,
+                    guess_away = excluded.guess_away
+                """,
+                (match_id, player, int(guess_home), int(guess_away))
+            )
+
+        conn.commit()
+        cur.close()
+
+    return existed
+
+
 def load_settings():
     api_key = os.environ.get("API_FOOTBALL_KEY")
     if api_key:
@@ -462,7 +591,7 @@ def get_api_fixture_by_id(fixture_id):
         "id": fixture_id
     }
 
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, headers=headers, params=params, timeout=10)
     data = response.json()
 
     fixtures = data.get("response", [])
@@ -486,7 +615,7 @@ def get_api_fixtures_by_date(match_date):
         "date": match_date
     }
 
-    response = requests.get(url, headers=headers, params=params)
+    response = requests.get(url, headers=headers, params=params, timeout=10)
     data = response.json()
 
     return data.get("response", []), data.get("errors", {})
@@ -532,8 +661,8 @@ def sync_match_order_from_api(match, api_fixture, only_before_kickoff=True):
 
     fixture_date = fixture.get("date")
     if only_before_kickoff and fixture_date:
-        kickoff = datetime.fromisoformat(fixture_date.replace("Z", "+00:00")).astimezone()
-        if datetime.now(kickoff.tzinfo) >= kickoff:
+        kickoff = api_datetime_to_israel(fixture_date).replace(tzinfo=None)
+        if israel_now() >= kickoff:
             return False
 
     current_home = match.get("home_team", "")
@@ -653,11 +782,15 @@ def finish_match_and_calculate(match_to_finish, actual_home, actual_away):
     save_players()
     save_predictions(predictions_list)
 
-def get_next_match():
+def get_live_match():
+    """
+    מחזיר משחק שכבר התחיל ועדיין לא סומן כ-finished.
+    מבוסס על שעון ישראל בלבד.
+    לא מתבצעת כאן שום משיכת API.
+    """
     matches = load_matches()
-    upcoming_matches = []
-
-    now = datetime.now()
+    live_matches = []
+    now = israel_now()
 
     for match in matches:
         if match.get("status") != "scheduled":
@@ -666,16 +799,66 @@ def get_next_match():
         match_date = match.get("match_date", "")
         match_time = match.get("match_time", "")
 
-        if match_time:
+        if not match_date:
+            continue
+
+        if not match_time:
+            match_time = "00:00"
+
+        try:
             match_datetime = datetime.strptime(
-                match_date + " " + match_time,
+                f"{match_date} {match_time}",
                 "%Y-%m-%d %H:%M"
             )
-        else:
-            match_datetime = datetime.strptime(
-                match_date + " 23:59",
-                "%Y-%m-%d %H:%M"
-            )
+        except ValueError:
+            continue
+
+        if match_datetime <= now:
+            live_matches.append((match_datetime, match))
+
+    if not live_matches:
+        return None
+
+    live_matches.sort(key=lambda item: item[0], reverse=True)
+    live_match = live_matches[0][1]
+
+    date_obj = datetime.strptime(
+        live_match["match_date"],
+        "%Y-%m-%d"
+    )
+
+    live_match["display_date"] = date_obj.strftime("%d/%m/%Y")
+    return live_match
+
+
+def get_next_match():
+    matches = load_matches()
+    upcoming_matches = []
+    now = israel_now()
+
+    for match in matches:
+        if match.get("status") != "scheduled":
+            continue
+
+        match_date = match.get("match_date", "")
+        match_time = match.get("match_time", "")
+
+        if not match_date:
+            continue
+
+        try:
+            if match_time:
+                match_datetime = datetime.strptime(
+                    match_date + " " + match_time,
+                    "%Y-%m-%d %H:%M"
+                )
+            else:
+                match_datetime = datetime.strptime(
+                    match_date + " 23:59",
+                    "%Y-%m-%d %H:%M"
+                )
+        except ValueError:
+            continue
 
         if match_datetime > now:
             upcoming_matches.append((match_datetime, match))
@@ -684,17 +867,15 @@ def get_next_match():
         return None
 
     upcoming_matches.sort(key=lambda x: x[0])
-
     next_match = upcoming_matches[0][1]
 
     date_obj = datetime.strptime(
         next_match["match_date"],
         "%Y-%m-%d"
     )
-
     next_match["display_date"] = date_obj.strftime("%d/%m/%Y")
-
     return next_match
+
 
 def is_match_locked(match):
     match_date = match.get("match_date", "")
@@ -706,14 +887,17 @@ def is_match_locked(match):
     if not match_time or match_time.strip() == "":
         return False
 
-    match_datetime = datetime.strptime(
-        match_date + " " + match_time,
-        "%Y-%m-%d %H:%M"
-    )
+    try:
+        match_datetime = datetime.strptime(
+            match_date + " " + match_time,
+            "%Y-%m-%d %H:%M"
+        )
+    except ValueError:
+        return False
 
     lock_time = match_datetime - timedelta(hours=1)
+    return israel_now() >= lock_time
 
-    return datetime.now() >= lock_time
 
 def is_admin():
     return session.get("is_admin", False)
@@ -832,23 +1016,25 @@ def calculate_match_points(guess_home, guess_away, actual_home, actual_away, is_
 @app.route("/")
 @login_required
 def home():
-    auto_check_results_if_needed()
-
+    # Public users never trigger API-Football requests.
     username = current_user()
     data = players[username]
 
     leaderboard_data = get_leaderboard()
-    next_match = get_next_match()
+
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    displayed_match = live_match or next_match
 
     current_prediction = None
 
-    if next_match:
+    if displayed_match:
         predictions_list = load_predictions()
 
         for prediction in predictions_list:
             if (
                 prediction["player"] == username
-                and prediction["match_id"] == next_match["id"]
+                and prediction["match_id"] == displayed_match["id"]
             ):
                 current_prediction = prediction
                 break
@@ -860,6 +1046,7 @@ def home():
         streak=data["streak"],
         rank=get_user_rank(username),
         next_match=next_match,
+        live_match=live_match,
         current_prediction=current_prediction,
         leaderboard=leaderboard_data
     )
@@ -962,8 +1149,23 @@ def Home():
             session.pop("username", None)
             return redirect(url_for("login"))
 
-    next_match = get_next_match()
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    displayed_match = live_match or next_match
+
     leaderboard_data = get_leaderboard()
+    current_prediction = None
+
+    if displayed_match:
+        predictions_list = load_predictions()
+
+        for prediction in predictions_list:
+            if (
+                    prediction["player"] == username
+                    and prediction["match_id"] == displayed_match["id"]
+            ):
+                current_prediction = prediction
+                break
 
     return render_template(
         "account.html",
@@ -972,6 +1174,8 @@ def Home():
         streak=data["streak"],
         rank=get_user_rank(username),
         next_match=next_match,
+        live_match=live_match,
+        current_prediction=current_prediction,
         leaderboard=leaderboard_data,
         error=error
     )
@@ -1052,120 +1256,310 @@ def statistics():
         exact_leader=exact_leader,
         exact_leader_count=exact_leader_count
     )
+
 @app.route("/predictions", methods=["GET", "POST"])
 @login_required
-
 def predictions():
     username = current_user()
-    match = get_next_match()
+
+    live_match = get_live_match()
+    next_match = get_next_match()
+
+    # המשחק שמוצג בכרטיסיית "המשחק הקרוב"
+    match = live_match or next_match
+    is_live = live_match is not None
 
     error = None
     success = None
-
-    existing_prediction = None
-    existing_home = ""
-    existing_away = ""
-    locked_predictions = []
-
-    if not match:
-        return render_template(
-            "predictions.html",
-            match=None,
-            locked=False,
-            error=None,
-            success=None,
-            existing_prediction=None,
-            existing_home="",
-            existing_away="",
-            locked_predictions=[]
-        )
+    active_tab = "current"
 
     predictions_list = load_predictions()
-    locked = is_match_locked(match)
+    matches_list = load_matches()
 
-    for prediction in predictions_list:
-        if prediction["player"] == username and prediction["match_id"] == match["id"]:
-            existing_prediction = prediction
-            existing_home = prediction["guess_home"]
-            existing_away = prediction["guess_away"]
-            break
-
+    # ---------------------------------------------------------
+    # שמירת ניחוש - עובד עכשיו עבור כל משחק לפי match_id
+    # ---------------------------------------------------------
     if request.method == "POST":
-        if locked:
+        posted_match_id = request.form.get("match_id", "").strip()
+        active_tab = request.form.get("source_tab", "current")
+
+        posted_match = None
+
+        for item in matches_list:
+            if item.get("id") == posted_match_id:
+                posted_match = item
+                break
+
+        if not posted_match:
+            error = "המשחק לא נמצא"
+
+        elif posted_match.get("status") != "scheduled":
+            error = "לא ניתן לעדכן ניחוש למשחק שהסתיים"
+
+        elif is_match_locked(posted_match):
             error = "הניחושים למשחק הזה כבר ננעלו"
+
         else:
             guess_home_raw = request.form.get("guess_home", "").strip()
             guess_away_raw = request.form.get("guess_away", "").strip()
 
             if guess_home_raw == "" or guess_away_raw == "":
                 error = "יש למלא תוצאה לשתי הקבוצות"
-            else:
-                guess_home = int(guess_home_raw)
-                guess_away = int(guess_away_raw)
 
-                if existing_prediction:
-                    existing_prediction["guess_home"] = guess_home
-                    existing_prediction["guess_away"] = guess_away
-                    success = "הניחוש עודכן בהצלחה"
-                else:
-                    predictions_list.append({
-                        "match_id": match["id"],
-                        "player": username,
-                        "guess_home": guess_home,
-                        "guess_away": guess_away,
-                        "points": 0,
-                        "bonus": 0,
-                        "exact": False,
-                        "match_finished": False
+            else:
+                try:
+                    guess_home = int(guess_home_raw)
+                    guess_away = int(guess_away_raw)
+
+                    if guess_home < 0 or guess_away < 0:
+                        error = "לא ניתן להזין תוצאה שלילית"
+
+                    else:
+                        existed = save_single_prediction(
+                            posted_match_id,
+                            username,
+                            guess_home,
+                            guess_away
+                        )
+
+                        success = (
+                            "הניחוש עודכן בהצלחה"
+                            if existed
+                            else "הניחוש נשמר בהצלחה"
+                        )
+
+                except ValueError:
+                    error = "יש להזין מספרים תקינים"
+
+    # טוענים שוב אחרי POST כדי שהתצוגה תציג מיד את הנתונים החדשים
+    predictions_list = load_predictions()
+    matches_list = load_matches()
+
+    # ---------------------------------------------------------
+    # כל הניחושים של המשתמש לפי match_id
+    # ---------------------------------------------------------
+    user_predictions = {}
+
+    for prediction in predictions_list:
+        if prediction["player"] == username:
+            user_predictions[prediction["match_id"]] = prediction
+
+    # ---------------------------------------------------------
+    # המשחק הקרוב / משחק חי
+    # ---------------------------------------------------------
+    existing_prediction = None
+    existing_home = ""
+    existing_away = ""
+    locked_predictions = []
+    locked = False
+
+    if match:
+        locked = is_live or is_match_locked(match)
+
+        existing_prediction = user_predictions.get(match["id"])
+
+        if existing_prediction:
+            existing_home = existing_prediction["guess_home"]
+            existing_away = existing_prediction["guess_away"]
+
+        if locked:
+            for player_name in players:
+                player_prediction = None
+
+                for prediction in predictions_list:
+                    if (
+                        prediction["match_id"] == match["id"]
+                        and prediction["player"] == player_name
+                    ):
+                        player_prediction = prediction
+                        break
+
+                if player_prediction:
+                    locked_predictions.append({
+                        "player": player_name,
+                        "guessed": True,
+                        "guess_home": player_prediction["guess_home"],
+                        "guess_away": player_prediction["guess_away"]
                     })
-                    success = "הניחוש נשמר בהצלחה"
+                else:
+                    locked_predictions.append({
+                        "player": player_name,
+                        "guessed": False,
+                        "guess_home": None,
+                        "guess_away": None
+                    })
 
-                save_predictions(predictions_list)
+    # ---------------------------------------------------------
+    # כל המשחקים העתידיים, ללא המשחק הקרוב
+    # ---------------------------------------------------------
+    future_matches = []
+    now = israel_now()
 
-                existing_home = guess_home
-                existing_away = guess_away
-                existing_prediction = True
+    current_match_id = match["id"] if match else None
 
-    if locked:
-        for player_name in players:
-            player_prediction = None
+    for future_match in matches_list:
+        if future_match.get("status") != "scheduled":
+            continue
 
-            for prediction in predictions_list:
-                if (
-                    prediction["match_id"] == match["id"]
-                    and prediction["player"] == player_name
-                ):
-                    player_prediction = prediction
-                    break
+        if future_match.get("id") == current_match_id:
+            continue
 
-            if player_prediction:
-                locked_predictions.append({
-                    "player": player_name,
-                    "guessed": True,
-                    "guess_home": player_prediction["guess_home"],
-                    "guess_away": player_prediction["guess_away"]
-                })
+        match_date = future_match.get("match_date", "")
+        match_time = future_match.get("match_time", "")
+
+        if not match_date:
+            continue
+
+        try:
+            if match_time:
+                match_datetime = datetime.strptime(
+                    f"{match_date} {match_time}",
+                    "%Y-%m-%d %H:%M"
+                )
             else:
-                locked_predictions.append({
-                    "player": player_name,
-                    "guessed": False,
-                    "guess_home": None,
-                    "guess_away": None
-                })
+                match_datetime = datetime.strptime(
+                    f"{match_date} 23:59",
+                    "%Y-%m-%d %H:%M"
+                )
+
+        except ValueError:
+            continue
+
+        if match_datetime <= now:
+            continue
+
+        date_obj = datetime.strptime(match_date, "%Y-%m-%d")
+
+        future_match["display_date"] = date_obj.strftime("%d/%m/%Y")
+        future_match["locked"] = is_match_locked(future_match)
+
+        future_match["prediction"] = user_predictions.get(
+            future_match["id"]
+        )
+
+        future_match["home_logo"] = TEAM_LOGOS.get(
+            future_match["home_team"]
+        )
+
+        future_match["away_logo"] = TEAM_LOGOS.get(
+            future_match["away_team"]
+        )
+
+        future_matches.append((match_datetime, future_match))
+
+    future_matches.sort(key=lambda item: item[0])
+    future_matches = [item[1] for item in future_matches]
 
     return render_template(
         "predictions.html",
+        is_live=is_live,
         match=match,
         locked=locked,
         error=error,
         success=success,
+        active_tab=active_tab,
+
         existing_prediction=existing_prediction,
         existing_home=existing_home,
         existing_away=existing_away,
         locked_predictions=locked_predictions,
-        home_logo=TEAM_LOGOS.get(match["home_team"]),
-        away_logo=TEAM_LOGOS.get(match["away_team"])
+
+        future_matches=future_matches,
+
+        home_logo=TEAM_LOGOS.get(match["home_team"]) if match else None,
+        away_logo=TEAM_LOGOS.get(match["away_team"]) if match else None
     )
+
+@app.route("/api/save-prediction", methods=["POST"])
+@login_required
+def save_prediction_api():
+    username = current_user()
+
+    data = request.get_json(silent=True) or {}
+
+    match_id = str(data.get("match_id", "")).strip()
+    guess_home_raw = data.get("guess_home")
+    guess_away_raw = data.get("guess_away")
+
+    # בדיקה שכל הנתונים הגיעו
+    if not match_id:
+        return jsonify({
+            "success": False,
+            "message": "המשחק לא נמצא"
+        }), 400
+
+    if guess_home_raw is None or guess_away_raw is None:
+        return jsonify({
+            "success": False,
+            "message": "יש למלא תוצאה לשתי הקבוצות"
+        }), 400
+
+    # בדיקת תוצאה
+    try:
+        guess_home = int(guess_home_raw)
+        guess_away = int(guess_away_raw)
+
+        if guess_home < 0 or guess_away < 0:
+            raise ValueError
+
+    except (ValueError, TypeError):
+        return jsonify({
+            "success": False,
+            "message": "יש להזין תוצאה תקינה"
+        }), 400
+
+    # חיפוש המשחק
+    matches_list = load_matches()
+
+    match = None
+
+    for item in matches_list:
+        if str(item.get("id")) == match_id:
+            match = item
+            break
+
+    if not match:
+        return jsonify({
+            "success": False,
+            "message": "המשחק לא נמצא"
+        }), 404
+
+    # אסור לנחש משחק שכבר הסתיים
+    if match.get("status") != "scheduled":
+        return jsonify({
+            "success": False,
+            "message": "לא ניתן לעדכן ניחוש למשחק שהסתיים"
+        }), 400
+
+    # בדיקת נעילה
+    if is_match_locked(match):
+        return jsonify({
+            "success": False,
+            "message": "הניחושים למשחק הזה כבר ננעלו"
+        }), 400
+
+    # שמירה אטומית של ניחוש יחיד - בלי למחוק/לשכתב ניחושים של משתמשים אחרים
+    existed = save_single_prediction(
+        match_id,
+        username,
+        guess_home,
+        guess_away
+    )
+
+    message = (
+        "הניחוש עודכן בהצלחה"
+        if existed
+        else "הניחוש נשמר בהצלחה"
+    )
+
+    return jsonify({
+        "success": True,
+        "message": message,
+        "match_id": match_id,
+        "guess_home": guess_home,
+        "guess_away": guess_away
+    })
+
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
     error = None
@@ -1177,6 +1571,14 @@ def admin():
             password = request.form.get("admin_password", "")
             if password == ADMIN_PASSWORD:
                 session["is_admin"] = True
+
+                # API synchronization is triggered ONLY after a successful
+                # admin password login. Normal admin page loads, refreshes and
+                # navigation between admin pages never call API-Football.
+                # The persistent 20-minute cooldown still protects against
+                # repeated logout/login cycles.
+                run_admin_api_sync_if_due()
+
                 return redirect(url_for("admin"))
             error = "סיסמת מנהל שגויה"
 
@@ -1204,14 +1606,91 @@ def admin():
             for player_data in players.values()
         )
 
+    # Prediction completion summary for the current/live match.
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    prediction_match = live_match or next_match
+
+    prediction_count = 0
+    missing_prediction_count = total_players
+
+    if prediction_match:
+        predictions_list = load_predictions()
+        predicted_players = {
+            prediction["player"]
+            for prediction in predictions_list
+            if prediction.get("match_id") == prediction_match.get("id")
+        }
+        prediction_count = sum(1 for player_name in players if player_name in predicted_players)
+        missing_prediction_count = max(total_players - prediction_count, 0)
+
     return render_template(
         "admin.html",
         error=error,
         total_players=total_players,
         leader_name=leader_name,
         leader_points=leader_points,
-        highest_streak=highest_streak
+        highest_streak=highest_streak,
+        prediction_match=prediction_match,
+        prediction_count=prediction_count,
+        missing_prediction_count=missing_prediction_count
     )
+
+
+@app.route("/admin/prediction-status")
+def admin_prediction_status():
+    if not is_admin():
+        return redirect(url_for("admin"))
+
+    live_match = get_live_match()
+    next_match = None if live_match else get_next_match()
+    match = live_match or next_match
+    is_live = live_match is not None
+
+    prediction_status = []
+    predicted_count = 0
+    missing_count = 0
+    locked = False
+    progress_percent = 0
+
+    if match:
+        predictions_list = load_predictions()
+        predicted_players = {
+            prediction["player"]
+            for prediction in predictions_list
+            if prediction.get("match_id") == match.get("id")
+        }
+
+        locked = is_live or is_match_locked(match)
+
+        for player_name in sorted(players.keys()):
+            has_prediction = player_name in predicted_players
+            if has_prediction:
+                predicted_count += 1
+            else:
+                missing_count += 1
+
+            prediction_status.append({
+                "player": player_name,
+                "has_prediction": has_prediction
+            })
+
+        if players:
+            progress_percent = round((predicted_count / len(players)) * 100)
+
+    return render_template(
+        "admin_prediction_status.html",
+        match=match,
+        is_live=is_live,
+        locked=locked,
+        prediction_status=prediction_status,
+        total_players=len(players),
+        predicted_count=predicted_count,
+        missing_count=missing_count,
+        progress_percent=progress_percent
+    )
+
+
 @app.route("/admin/matches", methods=["GET", "POST"])
 def admin_matches():
     if not is_admin():
@@ -1256,11 +1735,9 @@ def admin_matches():
                     away_id = teams_data["away"]["id"]
 
                     if home_id == NETANYA_TEAM_ID or away_id == NETANYA_TEAM_ID:
-                        fixture_datetime = datetime.fromisoformat(
-                            fixture["date"].replace("Z", "+00:00")
+                        local_datetime = api_datetime_to_israel(
+                            fixture["date"]
                         )
-
-                        local_datetime = fixture_datetime.astimezone()
 
                         match["api_fixture_id"] = fixture["id"]
                         match["source"] = "api"
@@ -1302,11 +1779,9 @@ def admin_matches():
                         fixture = api_fixture["fixture"]
                         teams_data = api_fixture["teams"]
 
-                        fixture_datetime = datetime.fromisoformat(
-                            fixture["date"].replace("Z", "+00:00")
+                        local_datetime = api_datetime_to_israel(
+                            fixture["date"]
                         )
-
-                        local_datetime = fixture_datetime.astimezone()
 
                         new_match = {
                             "id": str(uuid.uuid4()),
@@ -1387,8 +1862,8 @@ def admin_matches():
 
         elif action == "finish_match":
             match_id = request.form.get("match_id")
-            actual_home = int(request.form.get("actual_home"))
-            actual_away = int(request.form.get("actual_away"))
+            actual_home_raw = request.form.get("actual_home", "").strip()
+            actual_away_raw = request.form.get("actual_away", "").strip()
 
             match_to_finish = None
 
@@ -1401,61 +1876,43 @@ def admin_matches():
                 error = "המשחק לא נמצא"
             elif match_to_finish.get("status") == "finished":
                 error = "המשחק כבר הסתיים וחושב"
-            elif match_to_finish.get("api_fixture_id"):
-                error = "משחק שמיובא מה-API צריך להיסגר דרך בדיקת תוצאה מה-API בלבד"
+            elif actual_home_raw == "" or actual_away_raw == "":
+                error = "יש להזין תוצאת סיום לשתי הקבוצות"
             else:
-                predictions_list = load_predictions()
+                try:
+                    actual_home = int(actual_home_raw)
+                    actual_away = int(actual_away_raw)
 
-                match_to_finish["home_score"] = actual_home
-                match_to_finish["away_score"] = actual_away
-                match_to_finish["status"] = "finished"
+                    if actual_home < 0 or actual_away < 0:
+                        raise ValueError
 
-                for player_name in players:
-                    player_prediction = None
+                    # גיבוי אדמין מלא: ניתן לסגור ידנית גם משחק שמחובר ל-API.
+                    # כך תקלה / מכסה / השעיה של ה-API לא מונעת חישוב ניקוד.
+                    finish_match_and_calculate(
+                        match_to_finish,
+                        actual_home,
+                        actual_away
+                    )
 
-                    for prediction in predictions_list:
-                        if (
-                            prediction["player"] == player_name
-                            and prediction["match_id"] == match_id
-                        ):
-                            player_prediction = prediction
-                            break
+                    save_matches(matches)
 
-                    if player_prediction:
-                        points, is_exact = calculate_match_points(
-                            player_prediction["guess_home"],
-                            player_prediction["guess_away"],
-                            actual_home,
-                            actual_away,
-                            match_to_finish["is_playoff"]
+                    if match_to_finish.get("api_fixture_id"):
+                        success = (
+                            f"התוצאה הוזנה ידנית על ידי האדמין: "
+                            f"{match_to_finish['home_team']} {actual_home} - "
+                            f"{actual_away} {match_to_finish['away_team']}. "
+                            f"הניקוד חושב בהצלחה"
+                        )
+                    else:
+                        success = (
+                            f"התוצאה הוזנה: "
+                            f"{match_to_finish['home_team']} {actual_home} - "
+                            f"{actual_away} {match_to_finish['away_team']}. "
+                            f"הניקוד חושב בהצלחה"
                         )
 
-                        bonus = 0
-
-                        if is_exact:
-                            players[player_name]["streak"] += 1
-
-                            if players[player_name]["streak"] == 2:
-                                bonus = 4
-                                players[player_name]["streak"] = 0
-                        else:
-                            players[player_name]["streak"] = 0
-
-                        players[player_name]["points"] += points + bonus
-
-                        player_prediction["points"] = points
-                        player_prediction["bonus"] = bonus
-                        player_prediction["exact"] = is_exact
-                        player_prediction["match_finished"] = True
-
-                    else:
-                        players[player_name]["streak"] = 0
-
-                save_players()
-                save_predictions(predictions_list)
-                save_matches(matches)
-
-                success = "המשחק הסתיים והניקוד חושב בהצלחה"
+                except ValueError:
+                    error = "יש להזין תוצאה תקינה במספרים שאינם שליליים"
 
         elif action == "create_match":
             home_team = request.form.get("home_team")
@@ -1622,7 +2079,7 @@ def cron_update_match_times():
         return "Unauthorized", 401
 
     matches = load_matches()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = israel_now().strftime("%Y-%m-%d")
 
     updated = 0
     checked = 0
@@ -1647,11 +2104,9 @@ def cron_update_match_times():
         fixture = api_fixture["fixture"]
         teams_data = api_fixture["teams"]
 
-        fixture_datetime = datetime.fromisoformat(
-            fixture["date"].replace("Z", "+00:00")
+        local_datetime = api_datetime_to_israel(
+            fixture["date"]
         )
-
-        local_datetime = fixture_datetime.astimezone()
 
         order_changed = sync_match_order_from_api(
             match, api_fixture, only_before_kickoff=True
@@ -1673,8 +2128,8 @@ def cron_check_results():
         return "Unauthorized", 401
 
     matches = load_matches()
-    today = datetime.now().strftime("%Y-%m-%d")
-    now = datetime.now()
+    today = israel_now().strftime("%Y-%m-%d")
+    now = israel_now()
 
     checked = 0
     finished = 0
@@ -1733,9 +2188,12 @@ def cron_check_results():
     return f"Check results done. checked={checked}, finished={finished}, skipped={skipped}"
 
 def auto_attach_fixture_if_needed(matches):
-    today = datetime.now().strftime("%Y-%m-%d")
+    """
+    Attach today's manually-created Netanya match to API-Football when possible.
+    This function is called only from the authenticated admin synchronization flow.
+    """
+    today = israel_now().strftime("%Y-%m-%d")
     changed = False
-
     fixtures_cache = {}
 
     for match in matches:
@@ -1749,7 +2207,6 @@ def auto_attach_fixture_if_needed(matches):
             continue
 
         match_date = match.get("match_date")
-
         if not match_date:
             continue
 
@@ -1760,24 +2217,30 @@ def auto_attach_fixture_if_needed(matches):
         fixtures = fixtures_cache[match_date]
 
         for api_fixture in fixtures:
-            fixture = api_fixture["fixture"]
-            teams_data = api_fixture["teams"]
+            fixture = api_fixture.get("fixture", {})
+            teams_data = api_fixture.get("teams", {})
+            home_data = teams_data.get("home", {})
+            away_data = teams_data.get("away", {})
 
-            home_id = teams_data["home"]["id"]
-            away_id = teams_data["away"]["id"]
+            home_id = home_data.get("id")
+            away_id = away_data.get("id")
 
             if home_id == NETANYA_TEAM_ID or away_id == NETANYA_TEAM_ID:
-                fixture_datetime = datetime.fromisoformat(
-                    fixture["date"].replace("Z", "+00:00")
-                )
+                fixture_date = fixture.get("date")
+                if not fixture_date:
+                    continue
 
-                local_datetime = fixture_datetime.astimezone()
+                israel_datetime = api_datetime_to_israel(fixture_date)
 
-                match["api_fixture_id"] = fixture["id"]
+                match["api_fixture_id"] = fixture.get("id")
                 match["source"] = "api"
-                sync_match_order_from_api(match, api_fixture, only_before_kickoff=True)
-                match["match_date"] = local_datetime.strftime("%Y-%m-%d")
-                match["match_time"] = local_datetime.strftime("%H:%M")
+                sync_match_order_from_api(
+                    match,
+                    api_fixture,
+                    only_before_kickoff=True
+                )
+                match["match_date"] = israel_datetime.strftime("%Y-%m-%d")
+                match["match_time"] = israel_datetime.strftime("%H:%M")
                 match["status"] = "scheduled"
 
                 changed = True
@@ -1785,13 +2248,25 @@ def auto_attach_fixture_if_needed(matches):
 
     return changed
 
-def auto_check_results_if_needed():
-    matches = load_matches()
-    today = datetime.now().strftime("%Y-%m-%d")
-    now = datetime.now()
 
+def admin_api_sync():
+    """
+    Perform one controlled API synchronization cycle.
+
+    Rules:
+    - Called only immediately after a successful admin password login.
+    - Public visitors never call API-Football.
+    - Before kickoff: refresh official home/away and kickoff time.
+    - During the match: no live-score polling.
+    - Two hours after kickoff: check for FT and calculate points if available.
+    - If API is unavailable/suspended, the site keeps working from DB time/status.
+    """
+    matches = load_matches()
+    today = israel_now().strftime("%Y-%m-%d")
+    now = israel_now()
     changed = False
 
+    # A manual match for today may still need its Fixture ID.
     if auto_attach_fixture_if_needed(matches):
         changed = True
 
@@ -1802,50 +2277,119 @@ def auto_check_results_if_needed():
         if match.get("match_date") != today:
             continue
 
-        if not match.get("api_fixture_id"):
+        fixture_id = match.get("api_fixture_id")
+        if not fixture_id:
             continue
 
         match_time = match.get("match_time", "")
         if not match_time:
             continue
 
-        match_datetime = datetime.strptime(
-            match["match_date"] + " " + match_time,
-            "%Y-%m-%d %H:%M"
-        )
-
-        # Before kickoff, refresh the official home/away order as well as time.
-        # This makes the correction visible to admins and predictors even if the
-        # scheduled cron endpoint has not run yet.
-        if now < match_datetime:
-            api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
-            if api_fixture:
-                fixture = api_fixture["fixture"]
-                fixture_datetime = datetime.fromisoformat(
-                    fixture["date"].replace("Z", "+00:00")
-                ).astimezone()
-                if sync_match_order_from_api(match, api_fixture, only_before_kickoff=True):
-                    changed = True
-                match["match_date"] = fixture_datetime.strftime("%Y-%m-%d")
-                match["match_time"] = fixture_datetime.strftime("%H:%M")
+        try:
+            match_datetime = datetime.strptime(
+                match["match_date"] + " " + match_time,
+                "%Y-%m-%d %H:%M"
+            )
+        except ValueError:
             continue
 
-        if now < match_datetime + timedelta(hours=2):
-            continue
-
-        api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
+        # One request for this match during this admin sync cycle.
+        api_fixture = get_api_fixture_by_id(fixture_id)
         if not api_fixture:
             continue
 
-        fixture = api_fixture["fixture"]
-        goals = api_fixture["goals"]
-        status = fixture["status"]["short"]
+        fixture = api_fixture.get("fixture", {})
+        fixture_date = fixture.get("date")
 
-        if status == "FT" and goals["home"] is not None and goals["away"] is not None:
-            finish_match_and_calculate(match, goals["home"], goals["away"])
+        # Before kickoff we use the API only to correct time/home-away.
+        if now < match_datetime:
+            if fixture_date:
+                israel_datetime = api_datetime_to_israel(fixture_date)
+
+                if sync_match_order_from_api(
+                    match,
+                    api_fixture,
+                    only_before_kickoff=True
+                ):
+                    changed = True
+
+                new_date = israel_datetime.strftime("%Y-%m-%d")
+                new_time = israel_datetime.strftime("%H:%M")
+
+                if match.get("match_date") != new_date:
+                    match["match_date"] = new_date
+                    changed = True
+
+                if match.get("match_time") != new_time:
+                    match["match_time"] = new_time
+                    changed = True
+
+                if match.get("source") != "api":
+                    match["source"] = "api"
+                    changed = True
+
+            continue
+
+        # No live-result polling. Wait until the match should reasonably be over.
+        if now < match_datetime + timedelta(hours=2):
+            continue
+
+        goals = api_fixture.get("goals", {})
+        status = fixture.get("status", {}).get("short")
+
+        if (
+            status == "FT"
+            and goals.get("home") is not None
+            and goals.get("away") is not None
+        ):
+            finish_match_and_calculate(
+                match,
+                goals["home"],
+                goals["away"]
+            )
             changed = True
 
     if changed:
         save_matches(matches)
+
+    return changed
+
+
+def run_admin_api_sync_if_due():
+    """
+    Run API synchronization at most once every 20 minutes across all Render
+    instances/restarts. This function is invoked only after successful admin login. The timestamp is stored in PostgreSQL/SQLite app_state,
+    not in Flask memory.
+    """
+    state_key = "admin_api_last_sync"
+    now = israel_now()
+    last_sync_raw = get_app_state(state_key)
+
+    if last_sync_raw:
+        try:
+            last_sync = datetime.fromisoformat(last_sync_raw)
+            if now - last_sync < timedelta(minutes=ADMIN_API_COOLDOWN_MINUTES):
+                return False
+        except ValueError:
+            pass
+
+    # Mark the attempt before the network calls. If the external API is suspended
+    # or unavailable, repeated admin refreshes still cannot hammer the quota.
+    set_app_state(state_key, now.isoformat(timespec="seconds"))
+
+    try:
+        admin_api_sync()
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        # API failure must never prevent the admin page or the rest of the site
+        # from loading. The next attempt becomes available after the cooldown.
+        return False
+
+    return True
+
+
+# Kept for compatibility with older code paths. It intentionally performs no API call.
+def auto_check_results_if_needed():
+    return False
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True)
