@@ -16,7 +16,10 @@ app.secret_key = os.environ.get("SECRET_KEY", "temporary_secret_key_for_test")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Phxyuejhhoakh!")
 AUTO_SYNC_TOKEN = os.environ.get("AUTO_SYNC_TOKEN", "change_me_auto_sync_token")
 NETANYA_TEAM_ID = 4505
+SPORTSDB_TEAM_ID = 134087
+SPORTSDB_BASE_URL = "https://www.thesportsdb.com/api/v1/json"
 ADMIN_API_COOLDOWN_MINUTES = 20
+RESULT_API_COOLDOWN_MINUTES = 15
 def israel_utc_offset(dt_utc):
     """Return Israel UTC offset (2h winter / 3h DST) without zoneinfo."""
     year = dt_utc.year
@@ -562,64 +565,140 @@ def save_single_prediction(match_id, player, guess_home, guess_away):
 
 
 def load_settings():
-    api_key = os.environ.get("API_FOOTBALL_KEY")
-    if api_key:
-        return {"api_football_key": api_key}
-
-    if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, "r", encoding="utf-8") as file:
-            return json.load(file)
-
-    return {"api_football_key": ""}
+    # TheSportsDB V1 free key is 123. It can still be overridden in Render.
+    return {"sportsdb_api_key": os.environ.get("SPORTSDB_API_KEY", "123")}
 
 
 init_db()
 players = load_players()
 
 
-def get_api_fixture_by_id(fixture_id):
+def _sportsdb_request(endpoint, params=None):
     settings = load_settings()
-    api_key = settings["api_football_key"]
+    api_key = settings["sportsdb_api_key"]
+    url = f"{SPORTSDB_BASE_URL}/{api_key}/{endpoint}"
+    response = requests.get(url, params=params or {}, timeout=10)
+    response.raise_for_status()
+    return response.json()
 
-    url = "https://v3.football.api-sports.io/fixtures"
 
-    headers = {
-        "x-apisports-key": api_key
-    }
+def _sportsdb_event_datetime(event):
+    # strTimestamp is UTC in TheSportsDB. Prefer it so all existing Israel-time
+    # code can keep using the same legacy fixture structure.
+    timestamp = (event.get("strTimestamp") or "").strip()
+    if timestamp:
+        if timestamp.endswith("Z"):
+            return timestamp
+        return timestamp + "Z"
 
-    params = {
-        "id": fixture_id
-    }
-
-    response = requests.get(url, headers=headers, params=params, timeout=10)
-    data = response.json()
-
-    fixtures = data.get("response", [])
-
-    if not fixtures:
+    date_value = event.get("dateEventLocal") or event.get("dateEvent")
+    time_value = event.get("strTimeLocal") or event.get("strTime") or "00:00:00"
+    if not date_value:
         return None
 
-    return fixtures[0]
+    # Fallback fields are local Israel time. Convert them back to a UTC-like
+    # timestamp because api_datetime_to_israel() expects UTC input.
+    local_dt = datetime.fromisoformat(f"{date_value}T{time_value}")
+    offset = israel_utc_offset(local_dt)
+    utc_dt = local_dt - offset
+    return utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _sportsdb_team_id(raw_id, team_name):
+    # Keep the existing internal Netanya ID (4505) so the rest of the project
+    # and old database rows continue to work unchanged.
+    if str(raw_id or "") == str(SPORTSDB_TEAM_ID) or _is_netanya_name(team_name):
+        return NETANYA_TEAM_ID
+    try:
+        return int(raw_id) if raw_id is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _sportsdb_event_to_legacy_fixture(event):
+    if not event:
+        return None
+
+    event_id = event.get("idEvent")
+    legacy_id = event.get("idAPIfootball") or event_id
+    home_name = event.get("strHomeTeam") or ""
+    away_name = event.get("strAwayTeam") or ""
+    status = (event.get("strStatus") or "").upper()
+
+    # Existing project code expects TheSportsDB's short status names.
+    if status in {"MATCH FINISHED", "FINISHED"}:
+        status = "FT"
+
+    def score(value):
+        if value in (None, ""):
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "fixture": {
+            "id": int(legacy_id) if str(legacy_id or "").isdigit() else legacy_id,
+            "sportsdb_event_id": int(event_id) if str(event_id or "").isdigit() else event_id,
+            "date": _sportsdb_event_datetime(event),
+            "status": {"short": status},
+        },
+        "teams": {
+            "home": {
+                "id": _sportsdb_team_id(event.get("idHomeTeam"), home_name),
+                "name": home_name,
+            },
+            "away": {
+                "id": _sportsdb_team_id(event.get("idAwayTeam"), away_name),
+                "name": away_name,
+            },
+        },
+        "goals": {
+            "home": score(event.get("intHomeScore")),
+            "away": score(event.get("intAwayScore")),
+        },
+    }
+
+
+def _get_netanya_sportsdb_events():
+    events = []
+    seen = set()
+    for endpoint in ("eventslast.php", "eventsnext.php"):
+        data = _sportsdb_request(endpoint, {"id": SPORTSDB_TEAM_ID})
+        for event in data.get("results") or data.get("events") or []:
+            event_id = str(event.get("idEvent") or "")
+            if event_id and event_id not in seen:
+                seen.add(event_id)
+                events.append(event)
+    return events
+
+
+def get_api_fixture_by_id(fixture_id):
+    # First try it as a native TheSportsDB Event ID (manual admin import uses it).
+    data = _sportsdb_request("lookupevent.php", {"id": fixture_id})
+    events = data.get("events") or []
+    if events:
+        return _sportsdb_event_to_legacy_fixture(events[0])
+
+    # Existing DB rows can contain the old TheSportsDB fixture ID. TheSportsDB
+    # exposes it as idAPIfootball, so map it without migrating the database.
+    wanted = str(fixture_id)
+    for event in _get_netanya_sportsdb_events():
+        if str(event.get("idAPIfootball") or "") == wanted or str(event.get("idEvent") or "") == wanted:
+            return _sportsdb_event_to_legacy_fixture(event)
+    return None
+
 
 def get_api_fixtures_by_date(match_date):
-    settings = load_settings()
-    api_key = settings["api_football_key"]
-
-    url = "https://v3.football.api-sports.io/fixtures"
-
-    headers = {
-        "x-apisports-key": api_key
-    }
-
-    params = {
-        "date": match_date
-    }
-
-    response = requests.get(url, headers=headers, params=params, timeout=10)
-    data = response.json()
-
-    return data.get("response", []), data.get("errors", {})
-
+    fixtures = []
+    for event in _get_netanya_sportsdb_events():
+        event_date = event.get("dateEventLocal") or event.get("dateEvent")
+        if event_date == match_date:
+            fixture = _sportsdb_event_to_legacy_fixture(event)
+            if fixture:
+                fixtures.append(fixture)
+    return fixtures, {}
 
 
 def _normalize_team_name(name):
@@ -633,7 +712,7 @@ def _is_netanya_name(name):
 
 def sync_match_order_from_api(match, api_fixture, only_before_kickoff=True):
     """
-    Synchronize the local home/away order with API-Football.
+    Synchronize the local home/away order with TheSportsDB.
 
     API team IDs are the primary source of truth. For older manually-created
     matches that do not yet have IDs, the function uses the local Netanya name
@@ -1016,7 +1095,7 @@ def calculate_match_points(guess_home, guess_away, actual_home, actual_away, is_
 @app.route("/")
 @login_required
 def home():
-    # Public users never trigger API-Football requests.
+    # Public users never trigger TheSportsDB requests.
     username = current_user()
     data = players[username]
 
@@ -1574,7 +1653,7 @@ def admin():
 
                 # API synchronization is triggered ONLY after a successful
                 # admin password login. Normal admin page loads, refreshes and
-                # navigation between admin pages never call API-Football.
+                # navigation between admin pages never call TheSportsDB.
                 # The persistent 20-minute cooldown still protects against
                 # repeated logout/login cycles.
                 run_admin_api_sync_if_due()
@@ -1740,7 +1819,7 @@ def admin_matches():
                         )
 
                         match["api_fixture_id"] = fixture["id"]
-                        match["source"] = "api"
+                        match["source"] = "thesportsdb"
                         sync_match_order_from_api(match, api_fixture, only_before_kickoff=True)
                         match["match_date"] = local_datetime.strftime("%Y-%m-%d")
                         match["match_time"] = local_datetime.strftime("%H:%M")
@@ -1759,7 +1838,7 @@ def admin_matches():
             api_fixture_id = request.form.get("api_fixture_id", "").strip()
 
             if api_fixture_id == "":
-                error = "יש להזין Fixture ID"
+                error = "יש להזין TheSportsDB Event ID"
             else:
                 api_fixture = get_api_fixture_by_id(api_fixture_id)
 
@@ -1786,7 +1865,7 @@ def admin_matches():
                         new_match = {
                             "id": str(uuid.uuid4()),
                             "api_fixture_id": int(api_fixture_id),
-                            "source": "api",
+                            "source": "thesportsdb",
                             "home_team": teams_data["home"]["name"],
                             "away_team": teams_data["away"]["name"],
                             "home_team_id": teams_data["home"]["id"],
@@ -1817,7 +1896,7 @@ def admin_matches():
             elif match_to_check.get("status") == "finished":
                 error = "המשחק כבר הסתיים וחושב"
             elif not match_to_check.get("api_fixture_id"):
-                error = "למשחק הזה אין Fixture ID מה-API"
+                error = "למשחק הזה אין TheSportsDB Event ID מה-API"
             else:
                 api_fixture = get_api_fixture_by_id(
                     match_to_check["api_fixture_id"]
@@ -2113,7 +2192,7 @@ def cron_update_match_times():
         )
         match["match_date"] = local_datetime.strftime("%Y-%m-%d")
         match["match_time"] = local_datetime.strftime("%H:%M")
-        match["source"] = "api"
+        match["source"] = "thesportsdb"
 
         updated += 1
 
@@ -2189,7 +2268,7 @@ def cron_check_results():
 
 def auto_attach_fixture_if_needed(matches):
     """
-    Attach today's manually-created Netanya match to API-Football when possible.
+    Attach today's manually-created Netanya match to TheSportsDB when possible.
     This function is called only from the authenticated admin synchronization flow.
     """
     today = israel_now().strftime("%Y-%m-%d")
@@ -2233,7 +2312,7 @@ def auto_attach_fixture_if_needed(matches):
                 israel_datetime = api_datetime_to_israel(fixture_date)
 
                 match["api_fixture_id"] = fixture.get("id")
-                match["source"] = "api"
+                match["source"] = "thesportsdb"
                 sync_match_order_from_api(
                     match,
                     api_fixture,
@@ -2249,141 +2328,124 @@ def auto_attach_fixture_if_needed(matches):
     return changed
 
 
-def admin_api_sync():
-    """
-    Perform one controlled API synchronization cycle.
-
-    Rules:
-    - Called only immediately after a successful admin password login.
-    - Public visitors never call API-Football.
-    - Before kickoff: refresh official home/away and kickoff time.
-    - During the match: no live-score polling.
-    - Two hours after kickoff: check for FT and calculate points if available.
-    - If API is unavailable/suspended, the site keeps working from DB time/status.
-    """
+def admin_api_sync(mode="attach"):
+    """Controlled TheSportsDB synchronization, called only after admin login."""
     matches = load_matches()
     today = israel_now().strftime("%Y-%m-%d")
     now = israel_now()
     changed = False
 
-    # A manual match for today may still need its Fixture ID.
-    if auto_attach_fixture_if_needed(matches):
-        changed = True
+    if mode == "attach":
+        # Morning/admin-login discovery: only unattached matches cause API calls.
+        if auto_attach_fixture_if_needed(matches):
+            changed = True
+        if changed:
+            save_matches(matches)
+        return changed
 
+    if mode != "result":
+        return False
+
+    # Result mode is reached only from kickoff + 2 hours onward.
     for match in matches:
-        if match.get("status") == "finished":
-            continue
-
-        if match.get("match_date") != today:
+        if match.get("status") == "finished" or match.get("match_date") != today:
             continue
 
         fixture_id = match.get("api_fixture_id")
-        if not fixture_id:
-            continue
-
         match_time = match.get("match_time", "")
-        if not match_time:
+        if not fixture_id or not match_time:
             continue
 
         try:
-            match_datetime = datetime.strptime(
+            kickoff = datetime.strptime(
                 match["match_date"] + " " + match_time,
                 "%Y-%m-%d %H:%M"
             )
         except ValueError:
             continue
 
-        # One request for this match during this admin sync cycle.
+        if now < kickoff + timedelta(hours=2):
+            continue
+
         api_fixture = get_api_fixture_by_id(fixture_id)
         if not api_fixture:
             continue
 
         fixture = api_fixture.get("fixture", {})
-        fixture_date = fixture.get("date")
-
-        # Before kickoff we use the API only to correct time/home-away.
-        if now < match_datetime:
-            if fixture_date:
-                israel_datetime = api_datetime_to_israel(fixture_date)
-
-                if sync_match_order_from_api(
-                    match,
-                    api_fixture,
-                    only_before_kickoff=True
-                ):
-                    changed = True
-
-                new_date = israel_datetime.strftime("%Y-%m-%d")
-                new_time = israel_datetime.strftime("%H:%M")
-
-                if match.get("match_date") != new_date:
-                    match["match_date"] = new_date
-                    changed = True
-
-                if match.get("match_time") != new_time:
-                    match["match_time"] = new_time
-                    changed = True
-
-                if match.get("source") != "api":
-                    match["source"] = "api"
-                    changed = True
-
-            continue
-
-        # No live-result polling. Wait until the match should reasonably be over.
-        if now < match_datetime + timedelta(hours=2):
-            continue
-
         goals = api_fixture.get("goals", {})
         status = fixture.get("status", {}).get("short")
 
-        if (
-            status == "FT"
-            and goals.get("home") is not None
-            and goals.get("away") is not None
-        ):
-            finish_match_and_calculate(
-                match,
-                goals["home"],
-                goals["away"]
-            )
+        if status == "FT" and goals.get("home") is not None and goals.get("away") is not None:
+            finish_match_and_calculate(match, goals["home"], goals["away"])
             changed = True
 
     if changed:
         save_matches(matches)
-
     return changed
 
 
 def run_admin_api_sync_if_due():
     """
-    Run API synchronization at most once every 20 minutes across all Render
-    instances/restarts. This function is invoked only after successful admin login. The timestamp is stored in PostgreSQL/SQLite app_state,
-    not in Flask memory.
+    Automatic admin-login policy:
+    1) If today's unfinished match is not attached, try discovery (20 min cooldown).
+    2) Once attached, make ZERO automatic API calls before kickoff + 2 hours.
+    3) From kickoff + 2 hours, check at most every 15 minutes until FT.
     """
-    state_key = "admin_api_last_sync"
+    matches = load_matches()
+    today = israel_now().strftime("%Y-%m-%d")
     now = israel_now()
-    last_sync_raw = get_app_state(state_key)
 
-    if last_sync_raw:
+    today_matches = [
+        m for m in matches
+        if m.get("status") != "finished" and m.get("match_date") == today
+    ]
+    if not today_matches:
+        return False
+
+    needs_attach = any(not m.get("api_fixture_id") for m in today_matches)
+
+    result_due = False
+    for match in today_matches:
+        if not match.get("api_fixture_id") or not match.get("match_time"):
+            continue
         try:
-            last_sync = datetime.fromisoformat(last_sync_raw)
-            if now - last_sync < timedelta(minutes=ADMIN_API_COOLDOWN_MINUTES):
+            kickoff = datetime.strptime(
+                match["match_date"] + " " + match["match_time"],
+                "%Y-%m-%d %H:%M"
+            )
+        except ValueError:
+            continue
+        if now >= kickoff + timedelta(hours=2):
+            result_due = True
+            break
+
+    if result_due:
+        mode = "result"
+        state_key = "admin_api_last_result_check"
+        cooldown = RESULT_API_COOLDOWN_MINUTES
+    elif needs_attach:
+        mode = "attach"
+        state_key = "admin_api_last_attach_sync"
+        cooldown = ADMIN_API_COOLDOWN_MINUTES
+    else:
+        # Attached already and not yet +2h: absolutely no API request.
+        return False
+
+    last_raw = get_app_state(state_key)
+    if last_raw:
+        try:
+            last = datetime.fromisoformat(last_raw)
+            if now - last < timedelta(minutes=cooldown):
                 return False
         except ValueError:
             pass
 
-    # Mark the attempt before the network calls. If the external API is suspended
-    # or unavailable, repeated admin refreshes still cannot hammer the quota.
+    # Store before networking so failures cannot cause rapid retries.
     set_app_state(state_key, now.isoformat(timespec="seconds"))
-
     try:
-        admin_api_sync()
+        admin_api_sync(mode=mode)
     except (requests.RequestException, ValueError, KeyError, TypeError):
-        # API failure must never prevent the admin page or the rest of the site
-        # from loading. The next attempt becomes available after the cooldown.
         return False
-
     return True
 
 
