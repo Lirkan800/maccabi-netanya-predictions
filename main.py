@@ -574,13 +574,9 @@ players = load_players()
 
 
 def _sportsdb_request(endpoint, params=None):
-    settings = load_settings()
-    api_key = settings["sportsdb_api_key"]
-    url = f"{SPORTSDB_BASE_URL}/{api_key}/{endpoint}"
-    response = requests.get(url, params=params or {}, timeout=10)
-    response.raise_for_status()
-    return response.json()
-
+    # API disabled by design: the site is fully manual.
+    # Keep the helper only for compatibility with old code paths.
+    return {"events": []}
 
 def _sportsdb_event_datetime(event):
     # strTimestamp is UTC in TheSportsDB. Prefer it so all existing Israel-time
@@ -1651,12 +1647,7 @@ def admin():
             if password == ADMIN_PASSWORD:
                 session["is_admin"] = True
 
-                # API synchronization is triggered ONLY after a successful
-                # admin password login. Normal admin page loads, refreshes and
-                # navigation between admin pages never call TheSportsDB.
-                # The persistent 20-minute cooldown still protects against
-                # repeated logout/login cycles.
-                run_admin_api_sync_if_due()
+                # תוצאות ומשחקים מנוהלים ידנית בלבד. אין משיכות API אוטומטיות.
 
                 return redirect(url_for("admin"))
             error = "סיסמת מנהל שגויה"
@@ -1781,153 +1772,7 @@ def admin_matches():
 
     if request.method == "POST":
         action = request.form.get("action")
-        if action == "attach_netanya_api":
-            attached_count = 0
-            checked_dates = {}
-
-            for match in matches:
-                if match.get("status") == "finished":
-                    continue
-
-                if match.get("api_fixture_id"):
-                    continue
-
-                match_date = match.get("match_date")
-
-                if not match_date:
-                    continue
-
-                if match_date not in checked_dates:
-                    fixtures, api_errors = get_api_fixtures_by_date(match_date)
-                    checked_dates[match_date] = {
-                        "fixtures": fixtures,
-                        "errors": api_errors
-                    }
-
-                fixtures = checked_dates[match_date]["fixtures"]
-
-                for api_fixture in fixtures:
-                    fixture = api_fixture["fixture"]
-                    teams_data = api_fixture["teams"]
-
-                    home_id = teams_data["home"]["id"]
-                    away_id = teams_data["away"]["id"]
-
-                    if home_id == NETANYA_TEAM_ID or away_id == NETANYA_TEAM_ID:
-                        local_datetime = api_datetime_to_israel(
-                            fixture["date"]
-                        )
-
-                        match["api_fixture_id"] = fixture["id"]
-                        match["source"] = "thesportsdb"
-                        sync_match_order_from_api(match, api_fixture, only_before_kickoff=True)
-                        match["match_date"] = local_datetime.strftime("%Y-%m-%d")
-                        match["match_time"] = local_datetime.strftime("%H:%M")
-                        match["status"] = "scheduled"
-
-                        attached_count += 1
-                        break
-
-            save_matches(matches)
-
-            if attached_count > 0:
-                success = f"חוברו {attached_count} משחקים ל-API בהצלחה"
-            else:
-                error = "לא נמצאו משחקי נתניה זמינים ב-API לתאריכים שבמערכת"
-        elif action == "import_api_match":
-            api_fixture_id = request.form.get("api_fixture_id", "").strip()
-
-            if api_fixture_id == "":
-                error = "יש להזין TheSportsDB Event ID"
-            else:
-                api_fixture = get_api_fixture_by_id(api_fixture_id)
-
-                if not api_fixture:
-                    error = "לא נמצא משחק ב-API"
-                else:
-                    already_exists = False
-
-                    for match in matches:
-                        if str(match.get("api_fixture_id")) == str(api_fixture_id):
-                            already_exists = True
-                            break
-
-                    if already_exists:
-                        error = "המשחק כבר קיים במערכת"
-                    else:
-                        fixture = api_fixture["fixture"]
-                        teams_data = api_fixture["teams"]
-
-                        local_datetime = api_datetime_to_israel(
-                            fixture["date"]
-                        )
-
-                        new_match = {
-                            "id": str(uuid.uuid4()),
-                            "api_fixture_id": int(api_fixture_id),
-                            "source": "thesportsdb",
-                            "home_team": teams_data["home"]["name"],
-                            "away_team": teams_data["away"]["name"],
-                            "home_team_id": teams_data["home"]["id"],
-                            "away_team_id": teams_data["away"]["id"],
-                            "match_date": local_datetime.strftime("%Y-%m-%d"),
-                            "match_time": local_datetime.strftime("%H:%M"),
-                            "is_playoff": False,
-                            "home_score": None,
-                            "away_score": None,
-                            "status": "scheduled"
-                        }
-
-                        matches.append(new_match)
-                        save_matches(matches)
-                        success = "המשחק יובא מה-API בהצלחה"
-        elif action == "check_api_result":
-            match_id = request.form.get("match_id")
-
-            match_to_check = None
-
-            for match in matches:
-                if match["id"] == match_id:
-                    match_to_check = match
-                    break
-
-            if not match_to_check:
-                error = "המשחק לא נמצא"
-            elif match_to_check.get("status") == "finished":
-                error = "המשחק כבר הסתיים וחושב"
-            elif not match_to_check.get("api_fixture_id"):
-                error = "למשחק הזה אין TheSportsDB Event ID מה-API"
-            else:
-                api_fixture = get_api_fixture_by_id(
-                    match_to_check["api_fixture_id"]
-                )
-
-                if not api_fixture:
-                    error = "לא הצלחתי למשוך את המשחק מה-API"
-                else:
-                    fixture = api_fixture["fixture"]
-                    goals = api_fixture["goals"]
-                    status = fixture["status"]["short"]
-
-                    if status != "FT":
-                        error = f"המשחק עדיין לא הסתיים. סטטוס נוכחי: {status}"
-                    elif goals["home"] is None or goals["away"] is None:
-                        error = "המשחק הסתיים אבל אין עדיין תוצאה זמינה"
-                    else:
-                        finish_match_and_calculate(
-                            match_to_check,
-                            goals["home"],
-                            goals["away"]
-                        )
-
-                        save_matches(matches)
-
-                        success = (
-                            f"התוצאה נמשכה מה-API: "
-                            f"{match_to_check['home_team']} {goals['home']} - "
-                            f"{goals['away']} {match_to_check['away_team']}. "
-                            f"הניקוד חושב בהצלחה"
-                        )
+        # API actions disabled: matches and results are managed manually.
         if action == "delete_match":
             match_id = request.form.get("match_id")
 
@@ -2037,13 +1882,16 @@ def admin_users():
 
     if request.method == "POST":
         action = request.form.get("action")
-        if action == "adjust_points":
+        if action == "set_points":
             name = request.form.get("player_name")
-            points_change = int(request.form.get("points_change", 0))
+            points_raw = request.form.get("points", "").strip()
 
             if name in players:
-                players[name]["points"] += points_change
-                save_players()
+                try:
+                    players[name]["points"] = int(points_raw)
+                    save_players()
+                except ValueError:
+                    pass
         elif action == "delete":
             name = request.form.get("player_to_delete")
             if name in players:
@@ -2156,115 +2004,15 @@ def is_valid_cron_token():
 def cron_update_match_times():
     if not is_valid_cron_token():
         return "Unauthorized", 401
-
-    matches = load_matches()
-    today = israel_now().strftime("%Y-%m-%d")
-
-    updated = 0
-    checked = 0
-
-    for match in matches:
-        if match.get("status") == "finished":
-            continue
-
-        if match.get("match_date") != today:
-            continue
-
-        if not match.get("api_fixture_id"):
-            continue
-
-        checked += 1
-
-        api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
-
-        if not api_fixture:
-            continue
-
-        fixture = api_fixture["fixture"]
-        teams_data = api_fixture["teams"]
-
-        local_datetime = api_datetime_to_israel(
-            fixture["date"]
-        )
-
-        order_changed = sync_match_order_from_api(
-            match, api_fixture, only_before_kickoff=True
-        )
-        match["match_date"] = local_datetime.strftime("%Y-%m-%d")
-        match["match_time"] = local_datetime.strftime("%H:%M")
-        match["source"] = "thesportsdb"
-
-        updated += 1
-
-    save_matches(matches)
-
-    return f"Update match times done. checked={checked}, updated={updated}"
+    return "API sync disabled. Matches are managed manually.", 200
 
 
 @app.route("/cron/check-results")
 def cron_check_results():
     if not is_valid_cron_token():
         return "Unauthorized", 401
+    return "API result checks disabled. Results are entered manually.", 200
 
-    matches = load_matches()
-    today = israel_now().strftime("%Y-%m-%d")
-    now = israel_now()
-
-    checked = 0
-    finished = 0
-    skipped = 0
-
-    for match in matches:
-        if match.get("status") == "finished":
-            skipped += 1
-            continue
-
-        if match.get("match_date") != today:
-            skipped += 1
-            continue
-
-        if not match.get("api_fixture_id"):
-            skipped += 1
-            continue
-
-        match_time = match.get("match_time", "")
-
-        if not match_time:
-            skipped += 1
-            continue
-
-        match_datetime = datetime.strptime(
-            match["match_date"] + " " + match_time,
-            "%Y-%m-%d %H:%M"
-        )
-
-        if now < match_datetime:
-            skipped += 1
-            continue
-
-        checked += 1
-
-        api_fixture = get_api_fixture_by_id(match["api_fixture_id"])
-
-        if not api_fixture:
-            continue
-
-        fixture = api_fixture["fixture"]
-        goals = api_fixture["goals"]
-        status = fixture["status"]["short"]
-
-        if status == "FT" and goals["home"] is not None and goals["away"] is not None:
-            finish_match_and_calculate(
-                match,
-                goals["home"],
-                goals["away"]
-            )
-
-            finished += 1
-
-    save_matches(matches)
-
-    return f"Check results done. checked={checked}, finished={finished}, skipped={skipped}"
 
 def auto_attach_fixture_if_needed(matches):
     """

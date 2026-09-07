@@ -37,7 +37,7 @@
 
     <div class="users-desktop">
         <table>
-            <tr><th>משתתף</th><th>נקודות</th><th>רצף</th><th>מחיקה</th><th>עדכון ניקוד</th></tr>
+            <tr><th>משתתף</th><th>נקודות</th><th>רצף</th><th>מחיקה</th><th>קביעת ניקוד</th></tr>
             {% for player, data in leaderboard %}
             <tr>
                 <td>{{ player }}</td>
@@ -52,8 +52,8 @@
                 <td>
                     <form method="POST">
                         <input type="hidden" name="player_name" value="{{ player }}">
-                        <input type="number" name="points_change" value="0">
-                        <button type="submit" name="action" value="adjust_points">עדכן ניקוד</button>
+                        <input type="number" name="points" value="{{ data.points }}">
+                        <button type="submit" name="action" value="set_points">שמור ניקוד</button>
                     </form>
                 </td>
             </tr>
@@ -79,10 +79,10 @@
                 <input type="hidden" name="player_name" value="{{ player }}">
                 <div class="user-actions">
                     <div>
-                        <label>שינוי ניקוד</label>
-                        <input type="number" name="points_change" value="0">
+                        <label>ניקוד</label>
+                        <input type="number" name="points" value="{{ data.points }}">
                     </div>
-                    <button type="submit" name="action" value="adjust_points">עדכן</button>
+                    <button type="submit" name="action" value="set_points">שמור</button>
                 </div>
             </form>
         </div>
