@@ -1,155 +1,222 @@
 {% extends "base.html" %}
 
-{% block title %}
-ניהול משחקים
-{% endblock %}
+{% block title %}ניהול משחקים{% endblock %}
 
 {% block content %}
+<style>
+    .matches-admin .section-title { margin-bottom: 18px; }
+    .matches-admin .create-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+    .matches-admin .field label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #ddd;
+    }
+    .matches-admin .field input,
+    .matches-admin .field select { max-width: none; margin: 0; }
+    .matches-admin .check-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 16px 0;
+    }
+    .matches-admin .check-row input { width: auto; margin: 0; }
+    .matches-admin .create-btn { width: 100%; }
 
-<div class="card">
-    <h2>⚽ ניהול משחקים</h2>
-    <h3>🌍 ייבוא משחק מה-API</h3>
+    .match-list {
+        display: grid;
+        gap: 14px;
+    }
+    .match-admin-card {
+        background: #111;
+        border: 1px solid #333;
+        border-radius: 16px;
+        padding: 16px;
+    }
+    .match-admin-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .match-admin-teams {
+        font-size: 18px;
+        font-weight: bold;
+        line-height: 1.5;
+    }
+    .match-id {
+        color: #999;
+        font-size: 11px;
+        margin-top: 3px;
+        overflow-wrap: anywhere;
+    }
+    .status-badge {
+        flex: 0 0 auto;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255,212,0,.12);
+        border: 1px solid rgba(255,212,0,.35);
+        color: #ffd400;
+        font-size: 12px;
+        font-weight: bold;
+    }
+    .status-badge.finished {
+        background: rgba(76,175,80,.12);
+        border-color: rgba(76,175,80,.4);
+        color: #7ee081;
+    }
+    .match-meta {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    .meta-item {
+        background: #191919;
+        border-radius: 10px;
+        padding: 9px;
+        text-align: center;
+    }
+    .meta-label { display: block; color: #999; font-size: 11px; margin-bottom: 3px; }
+    .meta-value { font-weight: bold; font-size: 13px; }
+    .match-actions {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: end;
+    }
+    .finish-form {
+        display: flex;
+        align-items: end;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .score-box { flex: 0 0 72px; }
+    .score-box label { display:block; font-size:11px; color:#aaa; margin-bottom:4px; }
+    .score-box input { width:72px; margin:0; text-align:center; }
+    .finish-form button { flex: 1 1 160px; }
+    .delete-form button { white-space: nowrap; }
+    .finished-note { color: #7ee081; font-weight: bold; align-self: center; }
 
-<form method="POST">
-    <p>Fixture ID</p>
-    <input type="text" name="api_fixture_id" placeholder="לדוגמה: 1489385">
+    @media (max-width: 768px) {
+        .matches-admin .create-grid { grid-template-columns: 1fr; gap: 10px; }
+        .match-admin-card { padding: 12px; border-radius: 14px; }
+        .match-admin-head { align-items: center; }
+        .match-admin-teams { font-size: 16px; }
+        .match-meta { grid-template-columns: 1fr 1fr; }
+        .match-actions { grid-template-columns: 1fr; }
+        .finish-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .score-box { width: 100%; }
+        .score-box input { width: 100%; max-width: none; }
+        .finish-form button { grid-column: 1 / -1; width: 100%; }
+        .delete-form button { width: 100%; }
+    }
+</style>
 
-    <br><br>
+<div class="matches-admin">
+    <div class="card">
+        <h2 class="section-title">⚽ ניהול משחקים</h2>
 
-    <button type="submit" name="action" value="import_api_match">
-        ייבא משחק מה-API
-    </button>
-</form>
+        {% if error %}<p class="error">{{ error }}</p>{% endif %}
+        {% if success %}<p class="success">{{ success }}</p>{% endif %}
 
-<hr>
-    {% if error %}
-        <p class="error">{{ error }}</p>
-    {% endif %}
+        <h3>➕ יצירת משחק חדש</h3>
+        <form method="POST">
+            <div class="create-grid">
+                <div class="field">
+                    <label>קבוצת בית</label>
+                    <select name="home_team">
+                        {% for team in teams %}<option value="{{ team }}">{{ team }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>קבוצת חוץ</label>
+                    <select name="away_team">
+                        {% for team in teams %}<option value="{{ team }}">{{ team }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label>תאריך המשחק</label>
+                    <input type="date" name="match_date">
+                </div>
+                <div class="field">
+                    <label>שעת המשחק</label>
+                    <input type="time" name="match_time">
+                </div>
+            </div>
+            <label class="check-row">
+                <input type="checkbox" name="is_playoff">
+                <span>משחק פלייאוף</span>
+            </label>
+            <button class="create-btn" type="submit" name="action" value="create_match">צור משחק</button>
+        </form>
+    </div>
 
-    {% if success %}
-        <p class="success">{{ success }}</p>
-    {% endif %}
+    <div class="card">
+        <h2>📋 המשחקים במערכת</h2>
 
-    <h3>➕ יצירת משחק חדש</h3>
-
-    <form method="POST">
-
-        <p>קבוצת בית</p>
-        <select name="home_team">
-            {% for team in teams %}
-                <option value="{{ team }}">{{ team }}</option>
-            {% endfor %}
-        </select>
-
-        <p>קבוצת חוץ</p>
-        <select name="away_team">
-            {% for team in teams %}
-                <option value="{{ team }}">{{ team }}</option>
-            {% endfor %}
-        </select>
-
-        <p>תאריך המשחק</p>
-        <input type="date" name="match_date">
-
-        <p>שעת המשחק</p>
-        <input type="time" name="match_time">
-
-        <br><br>
-
-        <label>
-            <input type="checkbox" name="is_playoff">
-            משחק פלייאוף
-        </label>
-
-        <br><br>
-
-        <button type="submit" name="action" value="create_match">
-            צור משחק
-        </button>
-
-    </form>
-</div>
-
-<div class="card">
-    <h2>📋 המשחקים במערכת</h2>
-
-    {% if matches %}
-        <table>
-            <tr>
-                <th>מס׳</th>
-                <th>בית</th>
-                <th>חוץ</th>
-                <th>תאריך</th>
-                <th>שעה</th>
-                <th>פלייאוף</th>
-                <th>תוצאה</th>
-                <th>סטטוס</th>
-                <th>סיום משחק</th>
-                <th>מחיקה</th>
-            </tr>
-
+        {% if matches %}
+        <div class="match-list">
             {% for match in matches %}
-            <tr>
-                <td>{{ match.id }}</td>
-                <td>{{ match.home_team }}</td>
-                <td>{{ match.away_team }}</td>
-                <td>{{ match.match_date }}</td>
-                <td>{{ match.match_time }}</td>
-                <td>{% if match.is_playoff %}כן{% else %}לא{% endif %}</td>
+            <div class="match-admin-card">
+                <div class="match-admin-head">
+                    <div>
+                        <div class="match-admin-teams">{{ match.home_team }} — {{ match.away_team }}</div>
+                        <div class="match-id">{{ match.id }}</div>
+                    </div>
+                    <span class="status-badge {% if match.status == 'finished' %}finished{% endif %}">
+                        {% if match.status == 'finished' %}הסתיים{% else %}{{ match.status }}{% endif %}
+                    </span>
+                </div>
 
-                <td>
-                    {% if match.home_score is not none %}
-                        {{ match.home_score }} - {{ match.away_score }}
-                    {% else %}
-                        טרם נקבעה
-                    {% endif %}
-                </td>
+                <div class="match-meta">
+                    <div class="meta-item"><span class="meta-label">תאריך</span><span class="meta-value">{{ match.match_date }}</span></div>
+                    <div class="meta-item"><span class="meta-label">שעה</span><span class="meta-value">{{ match.match_time or '—' }}</span></div>
+                    <div class="meta-item"><span class="meta-label">פלייאוף</span><span class="meta-value">{% if match.is_playoff %}כן{% else %}לא{% endif %}</span></div>
+                    <div class="meta-item">
+                        <span class="meta-label">תוצאה</span>
+                        <span class="meta-value">{% if match.home_score is not none %}{{ match.home_score }} - {{ match.away_score }}{% else %}טרם נקבעה{% endif %}</span>
+                    </div>
+                </div>
 
-                <td>{{ match.status }}</td>
-
-                <td>
+                <div class="match-actions">
                     {% if match.status != "finished" %}
-                        <form method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');">
-                            <input type="hidden" name="match_id" value="{{ match.id }}">
-
-                            <input type="number" name="actual_home" min="0" value="0" style="width:70px;">
-                            -
-                            <input type="number" name="actual_away" min="0" value="0" style="width:70px;">
-
-                            <br><br>
-
-                            <button type="submit" name="action" value="finish_match">
-                                סיים וחשב ניקוד
-                                {% if match.api_fixture_id and match.status != "finished" %}
-    <form method="POST" onsubmit="return confirm('לבדוק תוצאה מה-API ולחשב ניקוד אם המשחק הסתיים?');">
-        <input type="hidden" name="match_id" value="{{ match.id }}">
-
-        <button type="submit" name="action" value="check_api_result">
-            בדוק תוצאה מה-API
-        </button>
-    </form>
-{% endif %}
-                            </button>
-                        </form>
-                    {% else %}
-                        חושב
-                    {% endif %}
-                </td>
-
-                <td>
-                    <form method="POST" onsubmit="return confirm('בטוח למחוק את המשחק הזה?');">
+                    <form class="finish-form" method="POST" onsubmit="return confirm('לסיים את המשחק ולחשב ניקוד?');">
                         <input type="hidden" name="match_id" value="{{ match.id }}">
-                        <button class="danger" type="submit" name="action" value="delete_match">
-                            מחק
-                        </button>
+                        <div class="score-box">
+                            <label>{{ match.home_team }}</label>
+                            <input type="number" name="actual_home" min="0" value="0" inputmode="numeric">
+                        </div>
+                        <div class="score-box">
+                            <label>{{ match.away_team }}</label>
+                            <input type="number" name="actual_away" min="0" value="0" inputmode="numeric">
+                        </div>
+                        <button type="submit" name="action" value="finish_match">סיים וחשב ניקוד</button>
                     </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
-    {% else %}
-        <p>עדיין אין משחקים במערכת.</p>
-    {% endif %}
-</div>
+                    {% else %}
+                    <div class="finished-note">✓ הניקוד חושב</div>
+                    {% endif %}
 
+                    <form class="delete-form" method="POST" onsubmit="return confirm('בטוח למחוק את המשחק הזה?');">
+                        <input type="hidden" name="match_id" value="{{ match.id }}">
+                        <button class="danger" type="submit" name="action" value="delete_match">מחק משחק</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+            <p>עדיין אין משחקים במערכת.</p>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}
