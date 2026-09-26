@@ -1258,78 +1258,77 @@ def Home():
 @app.route("/statistics")
 @login_required
 def statistics():
+    # Read-only calculations. Never change stored predictions, player points or admin tools.
     username = current_user()
-    predictions_list = load_predictions()
-
-    finished_predictions = [
-        prediction for prediction in predictions_list
-        if prediction.get("match_finished") == True
+    finished_matches = [
+        match for match in load_matches()
+        if match.get("status") == "finished"
+        and match.get("home_score") is not None
+        and match.get("away_score") is not None
     ]
+    predictions_by_match = {}
+    for prediction in load_predictions():
+        predictions_by_match.setdefault(prediction["match_id"], {})[prediction["player"]] = prediction
 
-    my_predictions = [
-        prediction for prediction in finished_predictions
-        if prediction["player"] == username
-    ]
+    calculated_predictions = []
+    streaks = {}
+    # load_matches() returns chronological match order. A missing prediction
+    # breaks a player's exact-score streak, just like finishing a match does.
+    for match in finished_matches:
+        match_predictions = predictions_by_match.get(match["id"], {})
+        for player_name in players:
+            prediction = match_predictions.get(player_name)
+            if prediction is None:
+                streaks[player_name] = 0
+                continue
+            points, exact = calculate_match_points(
+                prediction["guess_home"], prediction["guess_away"],
+                int(match["home_score"]), int(match["away_score"]),
+                match["is_playoff"]
+            )
+            bonus = 0
+            if exact:
+                streaks[player_name] = streaks.get(player_name, 0) + 1
+                if streaks[player_name] == 2:
+                    bonus = 4
+                    streaks[player_name] = 0
+            else:
+                streaks[player_name] = 0
+            calculated_predictions.append({
+                "player": player_name, "points": points, "bonus": bonus,
+                "exact": exact
+            })
 
     def build_stats(predictions):
         total = len(predictions)
-        exact_hits = 0
-        direction_hits = 0
-        bonuses = 0
-        total_points = 0
-
-        for prediction in predictions:
-            points = prediction.get("points", 0)
-            bonus = prediction.get("bonus", 0)
-            exact = prediction.get("exact", False)
-
-            total_points += points + bonus
-
-            if exact:
-                exact_hits += 1
-            elif points > 0:
-                direction_hits += 1
-
-            if bonus > 0:
-                bonuses += 1
-
-        success_rate = 0
-
-        if total > 0:
-            success_rate = round(((exact_hits + direction_hits) / total) * 100, 1)
-
+        exact_hits = sum(1 for p in predictions if p["exact"])
+        direction_hits = sum(1 for p in predictions if not p["exact"] and p["points"] > 0)
         return {
             "total": total,
             "exact_hits": exact_hits,
             "direction_hits": direction_hits,
-            "bonuses": bonuses,
-            "total_points": total_points,
-            "success_rate": success_rate
+            "bonuses": sum(1 for p in predictions if p["bonus"] > 0),
+            "total_points": sum(p["points"] + p["bonus"] for p in predictions),
+            "success_rate": round((exact_hits + direction_hits) / total * 100, 1) if total else 0
         }
 
-    my_stats = build_stats(my_predictions)
-    general_stats = build_stats(finished_predictions)
-
+    my_stats = build_stats([p for p in calculated_predictions if p["player"] == username])
+    general_stats = build_stats(calculated_predictions)
     exact_by_player = {}
+    for prediction in calculated_predictions:
+        if prediction["exact"]:
+            name = prediction["player"]
+            exact_by_player[name] = exact_by_player.get(name, 0) + 1
+    exact_leader = max(exact_by_player, key=exact_by_player.get) if exact_by_player else "אין עדיין"
+    exact_leader_count = exact_by_player.get(exact_leader, 0)
 
-    for prediction in finished_predictions:
-        if prediction.get("exact", False):
-            player_name = prediction["player"]
-            exact_by_player[player_name] = exact_by_player.get(player_name, 0) + 1
-
-    exact_leader = "אין עדיין"
-    exact_leader_count = 0
-
-    if exact_by_player:
-        exact_leader = max(exact_by_player, key=exact_by_player.get)
-        exact_leader_count = exact_by_player[exact_leader]
-
+    # The admin's manual points override is intentionally preserved. Show its
+    # actual leaderboard value separately when it differs from game-derived points.
+    leaderboard_points = int(players.get(username, {}).get("points", 0))
     return render_template(
-        "statistics.html",
-        my_stats=my_stats,
-        general_stats=general_stats,
-        exact_leader=exact_leader,
-        exact_leader_count=exact_leader_count
+        "statistics.html", my_stats=my_stats, general_stats=general_stats,
+        exact_leader=exact_leader, exact_leader_count=exact_leader_count,
+        leaderboard_points=leaderboard_points
     )
 
 @app.route("/predictions", methods=["GET", "POST"])

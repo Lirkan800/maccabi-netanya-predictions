@@ -309,6 +309,9 @@
             <div class="stat-title">נקודות מניחושים</div>
             <div class="stat-number">{{ my_stats.total_points }}</div>
             <p>הניקוד שצברת ממשחקים שחושבו.</p>
+            {% if leaderboard_points != my_stats.total_points %}
+            <p>הניקוד בטבלה: <strong>{{ leaderboard_points }}</strong> (כולל תיקונים ידניים באדמין או הפרשים היסטוריים).</p>
+            {% endif %}
         </div>
 
         <div class="stat-card">
