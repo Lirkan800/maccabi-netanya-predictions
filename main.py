@@ -83,7 +83,10 @@ TEAM_LOGOS = {
     "הפועל ת\"א": "הפועל תל אביב.png",
 
     "הפועל חיפה": "הפועל חיפה.png",
-    "הפועל ירושלים": "הפועל ירושלים.png",
+    "הפועל ירושלים": "hapoel_jerusalem.png",
+    "הפועל י-ם": "hapoel_jerusalem.png",
+    "הפועל י״ם": "hapoel_jerusalem.png",
+    'הפועל י"ם': 'hapoel_jerusalem.png',
 
     "מכבי פתח תקווה": "מכבי פתח תקווה.png",
     "מכבי פ\"ת": "מכבי פתח תקווה.png",
@@ -1512,11 +1515,11 @@ def predictions():
         )
 
         future_match["home_logo"] = TEAM_LOGOS.get(
-            future_match["home_team"]
+            " ".join(future_match["home_team"].split())
         )
 
         future_match["away_logo"] = TEAM_LOGOS.get(
-            future_match["away_team"]
+            " ".join(future_match["away_team"].split())
         )
 
         future_matches.append((match_datetime, future_match))
@@ -1540,8 +1543,8 @@ def predictions():
 
         future_matches=future_matches,
 
-        home_logo=TEAM_LOGOS.get(match["home_team"]) if match else None,
-        away_logo=TEAM_LOGOS.get(match["away_team"]) if match else None
+        home_logo=TEAM_LOGOS.get(" ".join(match["home_team"].split())) if match else None,
+        away_logo=TEAM_LOGOS.get(" ".join(match["away_team"].split())) if match else None
     )
 
 @app.route("/api/save-prediction", methods=["POST"])
