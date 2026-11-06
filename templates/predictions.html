@@ -6,6 +6,52 @@
 
 {% block content %}
 
+{# טבלת ניחושי כל המשתתפים למשחק אחד. show_points=True למשחק שהסתיים #}
+{% macro everyone_table(rows, match_item, show_points=False) %}
+    <div class="everyone-predictions" data-match-id="{{ match_item.id }}">
+        <h3 class="everyone-title">👀 ניחושי כל המשתתפים</h3>
+        <p class="everyone-subtitle">{{ match_item.home_team }} - {{ match_item.away_team }}</p>
+
+        {% if rows %}
+            <table class="everyone-table">
+                <tr>
+                    <th>משתתף</th>
+                    <th>ניחוש</th>
+                    {% if show_points %}<th>נקודות</th>{% endif %}
+                </tr>
+
+                {% for row in rows %}
+                    <tr class="{% if row.is_me %}me-row{% endif %} {% if show_points and row.exact %}exact-row{% endif %}">
+                        <td>{{ row.player }}{% if row.is_me %} (אני){% endif %}</td>
+
+                        <td class="guess-cell">
+                            {% if row.guessed %}
+                                <span class="guess-score">{{ row.guess_home }} - {{ row.guess_away }}</span>
+                                {% if show_points and row.exact %} 🎯{% endif %}
+                            {% else %}
+                                <span class="no-guess">לא ניחש</span>
+                            {% endif %}
+                        </td>
+
+                        {% if show_points and not row.guessed %}
+                            <td><span class="points-badge">—</span></td>
+                        {% elif show_points %}
+                            <td>
+                                <span class="points-badge {% if row.points > 0 %}positive{% endif %}">+{{ row.points }}</span>
+                                {% if row.bonus > 0 %}
+                                    <span class="bonus-badge">בונוס <bdi dir="ltr">+{{ row.bonus }}</bdi></span>
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+            </table>
+        {% else %}
+            <p style="text-align:center;">עדיין אין משתתפים להצגה.</p>
+        {% endif %}
+    </div>
+{% endmacro %}
+
 <style>
 .match-box {
     text-align: center;
@@ -252,7 +298,7 @@
 }
 
 .future-row.open .future-row-body {
-    max-height: 500px;
+    max-height: 2000px;
     opacity: 1;
     padding: 0 18px 18px;
     border-top-color: rgba(255,212,0,0.12);
@@ -356,6 +402,92 @@
 button.saving {
     opacity: 0.65;
     pointer-events: none;
+}
+
+/* ניחושי כל המשתתפים */
+
+.everyone-predictions {
+    margin-top: 16px;
+}
+
+.everyone-title {
+    text-align: center;
+    margin: 0 0 6px;
+    color: #ffd400;
+}
+
+.everyone-subtitle {
+    text-align: center;
+    color: #aaa;
+    font-size: 13px;
+    margin: 0 0 10px;
+}
+
+.everyone-table {
+    display: table !important;
+    width: 100% !important;
+    border-collapse: collapse;
+    white-space: normal !important;
+}
+
+.everyone-table th,
+.everyone-table td {
+    padding: 8px 6px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.everyone-table .guess-score {
+    font-weight: bold;
+    font-size: 16px;
+    letter-spacing: 1px;
+}
+
+.everyone-table tr.me-row td {
+    background: rgba(255,212,0,0.08);
+}
+
+.everyone-table tr.me-row td:first-child {
+    color: #ffd400;
+    font-weight: bold;
+}
+
+.everyone-table tr.exact-row .guess-score {
+    color: #7CFF8A;
+}
+
+.points-badge {
+    display: inline-block;
+    direction: ltr;
+    unicode-bidi: isolate;
+    min-width: 34px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: bold;
+    font-size: 13px;
+    background: rgba(255,255,255,0.07);
+    color: #bbb;
+}
+
+.points-badge.positive {
+    background: rgba(124,255,138,0.13);
+    color: #7CFF8A;
+}
+
+.bonus-badge {
+    display: inline-block;
+    margin-right: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-weight: bold;
+    font-size: 12px;
+    background: rgba(255,212,0,0.15);
+    color: #ffd400;
+}
+
+.final-score {
+    color: #ffd400;
+    font-weight: 900;
 }
 
 @media (max-width: 768px) {
@@ -519,7 +651,7 @@ button.saving {
         <button
             type="button"
             id="currentTabButton"
-            class="tab-button {% if active_tab != 'future' %}active{% endif %}"
+            class="tab-button {% if active_tab not in ['future', 'finished'] %}active{% endif %}"
             onclick="openPredictionTab('current')">
             ⚽ המשחק הקרוב
         </button>
@@ -535,12 +667,23 @@ button.saving {
             {% endif %}
         </button>
 
+        <button
+            type="button"
+            id="finishedTabButton"
+            class="tab-button {% if active_tab == 'finished' %}active{% endif %}"
+            onclick="openPredictionTab('finished')">
+            🏁 משחקים שהסתיימו
+            {% if finished_matches %}
+                ({{ finished_matches|length }})
+            {% endif %}
+        </button>
+
     </div>
 
 
     <div
         id="currentTab"
-        class="tab-content {% if active_tab != 'future' %}active{% endif %}"
+        class="tab-content {% if active_tab not in ['future', 'finished'] %}active{% endif %}"
     >
 
         {% if is_live %}
@@ -629,39 +772,6 @@ button.saving {
                         <p class="error">
                             🔒 הניחושים למשחק הזה ננעלו.
                         </p>
-                    {% endif %}
-
-                    <h3>👀 ניחושי המשתתפים</h3>
-
-                    {% if locked_predictions %}
-
-                        <table>
-                            <tr>
-                                <th>משתתף</th>
-                                <th>ניחוש</th>
-                            </tr>
-
-                            {% for prediction in locked_predictions %}
-                                <tr>
-                                    <td>{{ prediction.player }}</td>
-
-                                    <td>
-                                        {% if prediction.guessed %}
-                                            {{ match.home_team }}
-                                            {{ prediction.guess_home }}
-                                            -
-                                            {{ prediction.guess_away }}
-                                            {{ match.away_team }}
-                                        {% else %}
-                                            <span class="no-guess">לא ניחש</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </table>
-
-                    {% else %}
-                        <p>עדיין אין משתתפים להצגה.</p>
                     {% endif %}
 
                 </div>
@@ -762,6 +872,10 @@ button.saving {
 
                 </div>
             {% endif %}
+
+            <div class="card">
+                {{ everyone_table(locked_predictions, match) }}
+            </div>
 
         {% else %}
 
@@ -995,6 +1109,8 @@ button.saving {
 
                             {% endif %}
 
+                            {{ everyone_table(future_match.all_predictions, future_match) }}
+
                         </div>
 
                     </div>
@@ -1018,30 +1134,145 @@ button.saving {
 
     </div>
 
+
+    <div
+        id="finishedTab"
+        class="tab-content {% if active_tab == 'finished' %}active{% endif %}"
+    >
+
+        <h2 style="text-align:center;">
+            🏁 משחקים שהסתיימו
+        </h2>
+
+        <p class="future-summary">
+            לחצו על משחק כדי לראות מה כל אחד ניחש וכמה נקודות קיבל.
+        </p>
+
+        {% if finished_matches %}
+
+            <div class="future-list">
+
+                {% for finished_match in finished_matches %}
+
+                    <div class="future-row" id="finishedRow{{ loop.index }}">
+
+                        <button
+                            type="button"
+                            class="future-row-header"
+                            onclick="toggleFutureMatch('finishedRow{{ loop.index }}')"
+                        >
+
+                            <div class="future-date">
+                                {{ finished_match.display_date }}
+                            </div>
+
+                            <div class="future-teams-compact">
+                                {{ finished_match.home_team }}
+                                <span class="final-score">{{ finished_match.home_score }} - {{ finished_match.away_score }}</span>
+                                {{ finished_match.away_team }}
+                            </div>
+
+                            <div class="future-status">
+                                {% if finished_match.prediction %}
+                                    {% set my_total = finished_match.prediction.points + finished_match.prediction.bonus %}
+                                    <span class="{% if my_total > 0 %}status-guessed{% else %}status-missing{% endif %}">
+                                        שלי: <bdi dir="ltr">+{{ my_total }}</bdi>
+                                    </span>
+                                {% else %}
+                                    <span class="status-locked">לא ניחשת</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="future-arrow">▼</div>
+
+                        </button>
+
+                        <div class="future-row-body">
+
+                            <div class="future-detail-teams">
+
+                                <div class="future-detail-team">
+                                    {% if finished_match.home_logo %}
+                                        <img
+                                            src="{{ url_for('static', filename='teams/' + finished_match.home_logo) }}"
+                                            class="future-detail-logo"
+                                        >
+                                    {% endif %}
+                                    <div class="future-detail-name">{{ finished_match.home_team }}</div>
+                                </div>
+
+                                <div class="future-detail-vs">
+                                    {{ finished_match.home_score }} - {{ finished_match.away_score }}
+                                </div>
+
+                                <div class="future-detail-team">
+                                    {% if finished_match.away_logo %}
+                                        <img
+                                            src="{{ url_for('static', filename='teams/' + finished_match.away_logo) }}"
+                                            class="future-detail-logo"
+                                        >
+                                    {% endif %}
+                                    <div class="future-detail-name">{{ finished_match.away_team }}</div>
+                                </div>
+
+                            </div>
+
+                            {{ everyone_table(finished_match.all_predictions, finished_match, show_points=True) }}
+
+                        </div>
+
+                    </div>
+
+                {% endfor %}
+
+            </div>
+
+        {% else %}
+
+            <div style="text-align:center; padding:30px 10px;">
+                <h3>🏁 עדיין אין משחקים שהסתיימו</h3>
+            </div>
+
+        {% endif %}
+
+    </div>
+
 </div>
 
 
 <script>
 function openPredictionTab(tabName) {
-    const currentTab = document.getElementById("currentTab");
-    const futureTab = document.getElementById("futureTab");
+    const tabs = ["current", "future", "finished"];
 
-    const currentButton = document.getElementById("currentTabButton");
-    const futureButton = document.getElementById("futureTabButton");
-
-    if (tabName === "future") {
-        currentTab.classList.remove("active");
-        futureTab.classList.add("active");
-
-        currentButton.classList.remove("active");
-        futureButton.classList.add("active");
-    } else {
-        futureTab.classList.remove("active");
-        currentTab.classList.add("active");
-
-        futureButton.classList.remove("active");
-        currentButton.classList.add("active");
+    if (!tabs.includes(tabName)) {
+        tabName = "current";
     }
+
+    tabs.forEach(function(name) {
+        const content = document.getElementById(name + "Tab");
+        const button = document.getElementById(name + "TabButton");
+        const isActive = name === tabName;
+
+        if (content) content.classList.toggle("active", isActive);
+        if (button) button.classList.toggle("active", isActive);
+    });
+}
+
+
+// אחרי שמירה - מעדכנים את השורה שלי בטבלת "ניחושי כל המשתתפים" בלי לרענן
+function updateMyRowInEveryoneTable(matchId, guessHome, guessAway) {
+    document.querySelectorAll(".everyone-predictions").forEach(function(box) {
+        if (box.dataset.matchId !== String(matchId)) return;
+
+        const cell = box.querySelector("tr.me-row .guess-cell");
+        if (!cell) return;
+
+        cell.innerHTML = "";
+        const span = document.createElement("span");
+        span.className = "guess-score";
+        span.textContent = guessHome + " - " + guessAway;
+        cell.appendChild(span);
+    });
 }
 
 
@@ -1098,6 +1329,8 @@ async function savePredictionAjax(form) {
         feedback.textContent = "✅ " + data.message;
 
         button.textContent = "💾 עדכן ניחוש";
+
+        updateMyRowInEveryoneTable(matchId, data.guess_home, data.guess_away);
 
         const context = form.dataset.context;
 

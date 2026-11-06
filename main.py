@@ -1424,6 +1424,48 @@ def predictions():
     # ---------------------------------------------------------
     # המשחק הקרוב / משחק חי
     # ---------------------------------------------------------
+    # ---------------------------------------------------------
+    # ניחושי כל המשתתפים לכל משחק - גלויים לכולם תמיד
+    # ---------------------------------------------------------
+    predictions_by_match = {}
+
+    for prediction in predictions_list:
+        predictions_by_match.setdefault(prediction["match_id"], {})[prediction["player"]] = prediction
+
+    def everyone_predictions(match_id):
+        match_predictions = predictions_by_match.get(match_id, {})
+        rows = []
+
+        for player_name in players:
+            player_prediction = match_predictions.get(player_name)
+
+            if player_prediction:
+                rows.append({
+                    "player": player_name,
+                    "is_me": player_name == username,
+                    "guessed": True,
+                    "guess_home": player_prediction["guess_home"],
+                    "guess_away": player_prediction["guess_away"],
+                    "points": player_prediction.get("points", 0),
+                    "bonus": player_prediction.get("bonus", 0),
+                    "exact": player_prediction.get("exact", False)
+                })
+            else:
+                rows.append({
+                    "player": player_name,
+                    "is_me": player_name == username,
+                    "guessed": False,
+                    "guess_home": None,
+                    "guess_away": None,
+                    "points": 0,
+                    "bonus": 0,
+                    "exact": False
+                })
+
+        # המשתמש המחובר תמיד ראשון, אחריו מי שניחש, ובסוף מי שלא ניחש
+        rows.sort(key=lambda row: (not row["is_me"], not row["guessed"]))
+        return rows
+
     existing_prediction = None
     existing_home = ""
     existing_away = ""
@@ -1439,32 +1481,7 @@ def predictions():
             existing_home = existing_prediction["guess_home"]
             existing_away = existing_prediction["guess_away"]
 
-        if locked:
-            for player_name in players:
-                player_prediction = None
-
-                for prediction in predictions_list:
-                    if (
-                        prediction["match_id"] == match["id"]
-                        and prediction["player"] == player_name
-                    ):
-                        player_prediction = prediction
-                        break
-
-                if player_prediction:
-                    locked_predictions.append({
-                        "player": player_name,
-                        "guessed": True,
-                        "guess_home": player_prediction["guess_home"],
-                        "guess_away": player_prediction["guess_away"]
-                    })
-                else:
-                    locked_predictions.append({
-                        "player": player_name,
-                        "guessed": False,
-                        "guess_home": None,
-                        "guess_away": None
-                    })
+        locked_predictions = everyone_predictions(match["id"])
 
     # ---------------------------------------------------------
     # כל המשחקים העתידיים, ללא המשחק הקרוב
@@ -1522,10 +1539,46 @@ def predictions():
             " ".join(future_match["away_team"].split())
         )
 
+        future_match["all_predictions"] = everyone_predictions(future_match["id"])
+
         future_matches.append((match_datetime, future_match))
 
     future_matches.sort(key=lambda item: item[0])
     future_matches = [item[1] for item in future_matches]
+
+    # ---------------------------------------------------------
+    # משחקים שהסתיימו - היסטוריית הניחושים של כולם, מהחדש לישן
+    # ---------------------------------------------------------
+    finished_matches = []
+
+    for finished_match in matches_list:
+        if finished_match.get("status") != "finished":
+            continue
+
+        if finished_match.get("home_score") is None or finished_match.get("away_score") is None:
+            continue
+
+        try:
+            date_obj = datetime.strptime(finished_match.get("match_date", ""), "%Y-%m-%d")
+            finished_match["display_date"] = date_obj.strftime("%d/%m/%Y")
+        except ValueError:
+            finished_match["display_date"] = finished_match.get("match_date", "")
+
+        finished_match["prediction"] = user_predictions.get(finished_match["id"])
+        finished_match["home_logo"] = TEAM_LOGOS.get(" ".join(finished_match["home_team"].split()))
+        finished_match["away_logo"] = TEAM_LOGOS.get(" ".join(finished_match["away_team"].split()))
+
+        rows = everyone_predictions(finished_match["id"])
+        # במשחק שהסתיים: מסדרים לפי הניקוד שכל אחד קיבל
+        rows.sort(key=lambda row: (not row["guessed"], -(row["points"] + row["bonus"])))
+        finished_match["all_predictions"] = rows
+
+        finished_matches.append(finished_match)
+
+    finished_matches.sort(
+        key=lambda item: (item.get("match_date", ""), item.get("match_time", "")),
+        reverse=True
+    )
 
     return render_template(
         "predictions.html",
@@ -1542,6 +1595,7 @@ def predictions():
         locked_predictions=locked_predictions,
 
         future_matches=future_matches,
+        finished_matches=finished_matches,
 
         home_logo=TEAM_LOGOS.get(" ".join(match["home_team"].split())) if match else None,
         away_logo=TEAM_LOGOS.get(" ".join(match["away_team"].split())) if match else None

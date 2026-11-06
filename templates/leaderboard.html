@@ -97,6 +97,47 @@
     border-radius: 16px;
 }
 
+/* מקומות 1-3 בטבלה - מודגשים בצבעי זהב, כסף וארד */
+.leaderboard-table tr.top-row td {
+    font-weight: bold;
+}
+
+.leaderboard-table tr.rank-1 td {
+    background: rgba(255,212,0,0.16);
+    color: #ffe14d;
+}
+
+.leaderboard-table tr.rank-2 td {
+    background: rgba(200,210,220,0.13);
+    color: #e3e9ef;
+}
+
+.leaderboard-table tr.rank-3 td {
+    background: rgba(205,127,50,0.17);
+    color: #f0b27a;
+}
+
+.leaderboard-table tr.rank-1 td:first-child {
+    box-shadow: inset -4px 0 0 #ffd400;
+}
+
+.leaderboard-table tr.rank-2 td:first-child {
+    box-shadow: inset -4px 0 0 #c0c8d0;
+}
+
+.leaderboard-table tr.rank-3 td:first-child {
+    box-shadow: inset -4px 0 0 #cd7f32;
+}
+
+.leaderboard-table tr.top-row + tr:not(.top-row) td {
+    border-top: 2px solid rgba(255,212,0,0.35);
+}
+
+.rank-medal {
+    font-size: 1.15em;
+    margin-left: 4px;
+}
+
 @media (max-width: 768px) {
     .podium-wrapper {
     display: grid !important;
@@ -215,41 +256,7 @@
 <div class="card">
     <h2>🏆 טבלת דירוג</h2>
 
-    {% if leaderboard|length >= 1 %}
-        <div class="podium-wrapper">
-
-            {% if leaderboard|length >= 2 %}
-            <div class="podium-card second-place">
-                <div class="podium-rank">🥈</div>
-                <div class="podium-name">{{ leaderboard[1][0] }}</div>
-                <div class="podium-points">{{ leaderboard[1][1].points }} נק׳</div>
-                <p>🔥 רצף {{ leaderboard[1][1].streak }}</p>
-                <div class="podium-base">מקום 2</div>
-            </div>
-            {% endif %}
-
-            <div class="podium-card first-place" onmouseenter="launchConfetti(this)" onclick="launchConfetti(this)">
-                <div class="podium-rank">🥇</div>
-                <div class="podium-name">{{ leaderboard[0][0] }}</div>
-                <div class="podium-points">{{ leaderboard[0][1].points }} נק׳</div>
-                <p>🔥 רצף {{ leaderboard[0][1].streak }}</p>
-                <div class="podium-base">המוביל הגדול</div>
-            </div>
-
-            {% if leaderboard|length >= 3 %}
-            <div class="podium-card third-place">
-                <div class="podium-rank">🥉</div>
-                <div class="podium-name">{{ leaderboard[2][0] }}</div>
-                <div class="podium-points">{{ leaderboard[2][1].points }} נק׳</div>
-                <p>🔥 רצף {{ leaderboard[2][1].streak }}</p>
-                <div class="podium-base">מקום 3</div>
-            </div>
-            {% endif %}
-
-        </div>
-    {% endif %}
-
-    {% if leaderboard|length > 3 %}
+    {% if leaderboard %}
     <table class="leaderboard-table">
         <tr>
             <th>מקום</th>
@@ -258,9 +265,15 @@
             <th>רצף מדויקות</th>
         </tr>
 
-        {% for player, data in leaderboard[3:] %}
-        <tr>
-            <td>מקום {{ loop.index + 3 }}</td>
+        {% set medals = ["🥇", "🥈", "🥉"] %}
+        {% set rank_classes = ["rank-1", "rank-2", "rank-3"] %}
+
+        {% for player, data in leaderboard %}
+        <tr class="{% if loop.index <= 3 %}top-row {{ rank_classes[loop.index0] }}{% endif %}">
+            <td>
+                {% if loop.index <= 3 %}<span class="rank-medal">{{ medals[loop.index0] }}</span>{% endif %}
+                מקום {{ loop.index }}
+            </td>
             <td>{{ player }}</td>
             <td><strong>{{ data.points }}</strong> נק׳</td>
             <td>🔥 {{ data.streak }}</td>
@@ -270,67 +283,5 @@
     {% endif %}
 </div>
 
-<script>
-let confettiCooldown = false;
-
-function launchConfetti(element) {
-    if (confettiCooldown) return;
-
-    confettiCooldown = true;
-    setTimeout(() => {
-        confettiCooldown = false;
-    }, 700);
-
-    const colors = [
-        "#ffd400",
-        "#ffffff",
-        "#ff3b3b",
-        "#4caf50",
-        "#2196f3",
-        "#ff9800",
-        "#e040fb"
-    ];
-
-    const shapes = ["rect", "circle", "strip"];
-
-    const rect = element.getBoundingClientRect();
-    const startX = rect.left + rect.width / 2;
-    const startY = rect.top + rect.height / 2 + window.scrollY;
-
-    for (let i = 0; i < 80; i++) {
-        const confetti = document.createElement("span");
-        confetti.className = "confetti";
-
-        const color = colors[Math.floor(Math.random() * colors.length)];
-        const shape = shapes[Math.floor(Math.random() * shapes.length)];
-
-        confetti.style.background = color;
-        confetti.style.left = startX + "px";
-        confetti.style.top = startY + "px";
-
-        if (shape === "circle") {
-            confetti.style.borderRadius = "50%";
-            confetti.style.width = "9px";
-            confetti.style.height = "9px";
-        }
-
-        if (shape === "strip") {
-            confetti.style.width = "6px";
-            confetti.style.height = "22px";
-            confetti.style.borderRadius = "4px";
-        }
-
-        confetti.style.setProperty("--x", (Math.random() * 520 - 260) + "px");
-        confetti.style.setProperty("--y", (Math.random() * 360 - 120) + "px");
-        confetti.style.setProperty("--rotate", (Math.random() * 900 - 450) + "deg");
-
-        document.body.appendChild(confetti);
-
-        setTimeout(() => {
-            confetti.remove();
-        }, 1200);
-    }
-}
-</script>
 
 {% endblock %}
